@@ -1,0 +1,9 @@
+{
+  "name": "inbasket-pilot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Managerial in-basket pilot with AI advice",
+  "dependencies": {
+    "@netlify/blobs": "^11.1.0"
+  }
+}

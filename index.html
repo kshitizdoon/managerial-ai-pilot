@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Six managerial decisions</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div class="bar">
+  <span class="step" id="step">Welcome</span>
+  <span class="track"><i id="prog"></i></span>
+</div>
+
+<div class="wrap narrow" id="app"></div>
+
+<!-- Netlify form. Never shown. It exists so Netlify registers the form at
+     deploy time; storage.js posts to it when the function is not there.
+     Do not remove the fields; Netlify only accepts names it saw here. -->
+<form name="pilot" data-netlify="true" netlify-honeypot="bot-field" hidden>
+  <input type="hidden" name="form-name" value="pilot">
+  <input type="text" name="bot-field">
+  <input type="text" name="pid">
+  <input type="text" name="version">
+  <input type="text" name="defer_mode">
+  <textarea name="payload"></textarea>
+</form>
+
+<script src="js/config.js"></script>
+<script src="js/cases.js"></script>
+<script src="js/key.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/survey.js"></script>
+<script src="js/dashboard.js"></script>
+<script>
+/* router: #researcher=KEY opens the results view, anything else is the survey */
+function dashKeyFromHash(){
+  const m = location.hash.match(/^#researcher=?(.*)$/);
+  return m ? decodeURIComponent(m[1] || "") : null;
+}
+function boot(){
+  checkKey();
+  const k = dashKeyFromHash();
+  if(k !== null) showDashboard(k); else startSurvey();
+}
+window.addEventListener("hashchange", boot);
+boot();
+</script>
+</body>
+</html>

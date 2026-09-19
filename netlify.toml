@@ -1,0 +1,16 @@
+# Netlify configuration.
+# No build step: the site is plain HTML, CSS and JS in this folder.
+
+[build]
+  publish = "."
+  command = ""
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# /api/responses is also declared inside the function itself.
+[[redirects]]
+  from = "/api/responses"
+  to = "/.netlify/functions/responses"
+  status = 200
