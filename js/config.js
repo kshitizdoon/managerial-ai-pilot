@@ -1,0 +1,49 @@
+/* =============================================================
+   config.js — the knobs. Change these first; nothing else needs editing.
+   ============================================================= */
+
+window.CONFIG = {
+
+  /* ---- How the deferral decision is asked ------------------------------
+     "split"   1 Own, 2 Delegate, 1 Wait, 1 Hold.  (what you piloted)
+     "merged"  1 Own, 2 Delegate, 2 Set aside, then ONE follow-up question:
+               which of the two, if either, nobody should act on until a
+               fact is checked.
+     A participant can be sent to either mode with ?defer=merged in the link.
+     The mode used is stored with every response.                          */
+  deferMode: "split",
+
+  /* ---- Scoring ---------------------------------------------------------
+     unlistedDelegateScore: what a person who is not in the key's list for
+     that issue scores. 0 is what your current key implies. 40 is gentler:
+     nothing in Case 1 says Priya cannot chase the supplier.               */
+  unlistedDelegateScore: 0,
+
+  /* In "merged" mode the case score is (Own + Delegate + DeferSet) / 3.
+     The hold follow-up is scored separately, not inside the case score.
+     Set includeHoldInCaseScore true to fold it back in as a 4th part.     */
+  includeHoldInCaseScore: false,
+
+  /* ---- Fielding --------------------------------------------------------ies */
+  randomiseCaseOrder: true,   // order of the six cases
+  randomiseCardOrder: true,   // order of the five cards inside a case
+  showPilotQuestions: true,   // the "help us fix the survey" block
+
+  /* ---- Where responses go ---------------------------------------------
+     "auto" tries the Netlify function, then a Netlify form, and always
+     keeps a copy in the browser. See README.                              */
+  storage: "auto",
+  functionPath: "/api/responses",
+  formName: "pilot",
+
+  /* Anyone with this in the link can open the results view:
+     yoursite.netlify.app/#researcher=KEY
+     Set the same value as DASHBOARD_KEY in Netlify so the function will
+     hand over the data. Change it before you field the study.             */
+  dashboardKey: "change-me",
+
+  /* ---- Copy ------------------------------------------------------------ */
+  studyTitle: "Six managerial decisions",
+  minutes: 20,
+  debrief: "The AI advisor here was not a live AI tool. We wrote its plans, and some of them were weak on purpose. That is how we study the way people use AI advice."
+};
