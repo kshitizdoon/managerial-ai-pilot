@@ -6,7 +6,7 @@ const app = () => document.getElementById("app");
 const esc = s => String(s == null ? "" : s)
   .replace(/[&<>"]/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
 const uid = () => Math.random().toString(36).slice(2,8) + Date.now().toString(36).slice(-4);
-const shuffle = a => { a = [...a]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+/* shuffle and constrainedShuffle live in order.js */
 
 let ST = null;              // the response being built
 let pageStart = Date.now();
@@ -38,23 +38,70 @@ const need = k => (labelSet().find(l => l[0] === k) || [,,0])[2];
 function startSurvey(){
   const saved = loadLocal();
   if(saved && saved.done){ ST = saved; return thanks(); }
-  if(saved && saved.order){ ST = saved; return route(); }
+  if(saved && saved.order){
+    ST = saved;
+    /* a session left half-finished on this browser before "Edit the AI's
+       plan" was removed: send it to the editor it would get today, seeded
+       from the respondent's own plan. Finished records are untouched. */
+    Object.keys(ST.cases || {}).forEach(k => {
+      const r = ST.cases[k]; if(r && r.menu === "edit_ai" && !r.final) r.menu = "edit_mine";
+    });
+    return route();
+  }
   welcome();
+}
+
+/* Name and mobile. Default is the end of the survey: if a respondent gives
+   a name before answering, the plans stop being anonymous while they are
+   being made, and a managerial-judgement task is exactly the kind people
+   answer differently when it carries their name. Flip CONFIG.contactAt to
+   "start" if you would rather have it first. */
+function contactHTML(){
+  const end = CONFIG.contactAt === "end";
+  return `<div class="card">
+    <h3 style="margin-top:0">${end ? "For the prize draw" : "Before you start"}</h3>
+    <p class="small muted">${end
+      ? "Optional. Every fifth respondent wins a prize. What you write here is saved together with your answers, not separately, so leave it blank if you would rather not enter."
+      : "Used to run the prize draw and to reach you if a response does not save. It is stored with your answers, not separately."}</p>
+    <label class="small" for="nm">Name</label>
+    <input type="text" id="nm" autocomplete="name">
+    <label class="small" for="mb" style="display:block;margin-top:.6rem">Mobile number</label>
+    <input type="text" id="mb" inputmode="tel" autocomplete="tel">
+  </div>`;
+}
+function readContact(){
+  const nm = (document.getElementById("nm") || {}).value || "";
+  const mb = (document.getElementById("mb") || {}).value || "";
+  if(CONFIG.contactAt === "start" && (!nm.trim() || !mb.trim())){
+    const e = document.getElementById("e");
+    if(e) e.textContent = "Please give a name and a mobile number.";
+    return false;
+  }
+  window.__contact = {name:nm.trim(), mobile:mb.trim()};
+  return true;
 }
 
 function welcome(){
   setStep("Welcome", 0);
   paint(`
    <h1>${esc(CONFIG.studyTitle)}</h1>
-   <p class="serif">You will see six short work situations. In each one, five things need attention at the same time. You decide what to handle yourself, what to hand to someone else, and what to set aside for now.</p>
+   <p class="serif lead">You will be given six situations. Each situation has five issues. You give every issue one label.</p>
+   <p class="serif">You decide what to handle yourself, what to hand to someone on your team, and what to set aside for now.</p>
    <p class="serif">After your plan is recorded, an AI advisor shows you its plan for the same situation. You then decide what your final plan is.</p>
    <div class="card small">
      <p><b>About ${CONFIG.minutes} minutes.</b> Please do it in one sitting, without looking anything up.</p>
-     <p>Your answers are used for a student research project at IIM Ahmedabad. No names are collected. You can stop at any time by closing the page.</p>
+     <p>Your answers are used for a student research project at IIM Ahmedabad. You are not asked who you are while you work through the situations.</p>
+     <p>At the end you can leave a name and mobile number to enter the prize draw. That is optional, and if you give it, it is saved with your answers rather than kept apart from them.</p>
+     <p style="margin:0">You can stop at any time by closing the page.</p>
      <p style="margin:0">There are no trick questions and no right answer you are expected to guess.</p>
    </div>
+   ${CONFIG.contactAt === "start" ? contactHTML() : ""}
+   <p class="err" id="e"></p>
    <button class="go" id="begin">Start</button>`);
-  document.getElementById("begin").onclick = background;
+  document.getElementById("begin").onclick = () => {
+    if(CONFIG.contactAt === "start" && !readContact()) return;
+    background();
+  };
 }
 
 function background(){
@@ -82,8 +129,9 @@ function background(){
       deferMode: url.get("defer") || CONFIG.deferMode,
       started: new Date().toISOString(),
       bg: {programme:v[0], experience:v[1], managed:v[2], aiUse:v[3], undergrad:v[4]},
-      order: CONFIG.randomiseCaseOrder ? shuffle(CASES.map((_,i)=>i)) : CASES.map((_,i)=>i),
-      at: 0, cases: {}, msBg: since(), done: false
+      order: caseOrder(),
+      at: 0, cases: {}, msBg: since(), done: false,
+      contact: window.__contact || null
     };
     saveLocal(ST); howItWorks();
   };
@@ -96,6 +144,7 @@ function howItWorks(){
    <h2>How it works</h2>
    <div class="card serif">
      <p>Each situation has five issues. You give every issue one label.</p>
+     <p style="margin:.55rem 0"><b>What you are judged on.</b> In every situation you are responsible for how your unit performs over the next three months, not only today. The people on your team are part of what has to keep working over that period.</p>
      <p style="margin:.55rem 0">
        <b style="color:var(--own)">Own</b> — you handle it yourself now. One issue.<br>
        <b style="color:var(--del)">Delegate</b> — someone on your team handles it. Two issues, and you choose who.<br>
@@ -113,25 +162,84 @@ function howItWorks(){
   document.getElementById("next").onclick = () => { ST.msIntro = since(); saveLocal(ST); route(); };
 }
 
+/* ---------------------------------------------------------------- order */
+/* Both of these keep any declared "after" constraint, whether or not the
+   randomisation flags are on, and both are stored on the response so the
+   analysis can see the order each respondent actually saw. */
+function caseOrder(){
+  const ids = CASES.map(c => c.id), edges = caseEdges();
+  const seq = CONFIG.randomiseCaseOrder ? constrainedShuffle(ids, edges) : topoOrder(ids, edges);
+  return seq.map(id => CASES.findIndex(c => c.id === id));
+}
+function cardOrderFor(c){
+  const keys = c.issues.map(i => i.k), edges = cardEdges(c);
+  return CONFIG.randomiseCardOrder ? constrainedShuffle(keys, edges) : topoOrder(keys, edges);
+}
+
 /* ------------------------------------------------------------------ route */
 function route(){
   if(ST.at >= CASES.length) return closing();
   const c = CASES[ST.order[ST.at]];
   const rec = ST.cases[c.id] || (ST.cases[c.id] = {
     pos: ST.at + 1, errA: 0, errC: 0,
-    cardOrder: CONFIG.randomiseCardOrder ? shuffle(c.issues.map(i=>i.k)) : c.issues.map(i=>i.k)
+    cardOrder: cardOrderFor(c)
   });
+  if(!rec.seen)   return pageIntro(c, rec);
   if(!rec.first)  return pageBoard(c, rec, "first");
   if(!rec.menu)   return pageAdvisor(c, rec);
-  if((rec.menu === "edit_mine" || rec.menu === "edit_ai") && !rec.final) return pageBoard(c, rec, "final");
-  if(rec.conf2 == null) return pageChecks(c, rec);
+  if(rec.menu === "edit_mine" && !rec.final) return pageBoard(c, rec, "final");
   ST.at++; saveLocal(ST); route();
+}
+
+/* a clean screen between situations, so no page carries two jobs */
+function pageIntro(c, rec){
+  setStep(`Situation ${ST.at+1} of ${CASES.length}`, 10 + ST.at*13);
+  paint(`
+   <p class="small muted">Situation ${ST.at+1} of ${CASES.length}</p>
+   <h1>${esc(c.name)}</h1>
+   <p class="serif lead">${esc(c.opening)}</p>
+   <p class="serif lead muted">Five things need attention at the same time. You will give each one a label.</p>
+   <button class="go" id="next">See the situation</button>`);
+  document.getElementById("next").onclick = () => {
+    rec.seen = true; rec.msIntro = since(); saveLocal(ST); route();
+  };
 }
 
 function header(c){
   return `<p class="small muted">Situation ${ST.at+1} of ${CASES.length}</p>
    <h2>${esc(c.name)}</h2>
-   <div class="context">${c.context.map(p=>`<div class="pill"><b>${esc(p[0])}</b><span>${esc(p[1])}</span></div>`).join("")}</div>`;
+   <p class="situation serif">${esc(c.opening)}</p>`;
+}
+
+/* people are stored as [key, name, "Title \u2014 remit"] */
+function person(p){
+  const bits = String(p[2]).split(" \u2014 ");
+  return {k:p[0], name:p[1], title:bits[0] || p[2], remit:bits.slice(1).join(" \u2014 ")};
+}
+
+/* the roster must be readable while choosing, not only inside the dropdown:
+   the case text never says who is good at what, so the respondent has to
+   join the two. */
+function rosterHTML(c){
+  return `<div class="roster"><h4>Your team</h4><ul>` + c.people.map(p => {
+    const q = person(p);
+    return `<li><b>${esc(q.name)}</b><span class="t">${esc(q.title)}</span><span class="r">${esc(q.remit)}</span></li>`;
+  }).join("") + `</ul></div>`;
+}
+
+/* the situation again, on the advisor screen */
+function recapHTML(c, rec){
+  const byKey = k => c.issues.find(i => i.k === k);
+  return `<div class="recap"><h4>The situation again</h4>
+    <div class="recap-grid">${rec.cardOrder.map(k => { const i = byKey(k);
+      return `<div class="rcard"><b>${esc(i.n)}</b><span>${esc(i.t)}</span></div>`; }).join("")}</div>
+    ${rosterHTML(c)}</div>`;
+}
+
+const LIKERT = ["Not sure at all","Not very sure","Fairly sure","Very sure","Completely sure"];
+function likertHTML(id, label){
+  return `<fieldset class="likert"><legend>${label}</legend>` + LIKERT.map((o,i) =>
+    `<label><input type="radio" name="${id}" value="${i+1}"><span>${esc(o)}</span></label>`).join("") + `</fieldset>`;
 }
 
 function issueCards(c, rec, prefix){
@@ -145,7 +253,7 @@ function issueCards(c, rec, prefix){
         `<button type="button" class="chip" data-l="${lk}">${ln}</button>`).join("")}</div>
       <div class="who"><label for="${prefix}-${is.k}">Who handles it?</label>
         <select id="${prefix}-${is.k}"><option value="">Choose a person</option>
-        ${c.people.map(p=>`<option value="${p[0]}">${esc(p[1])} — ${esc(p[2])}</option>`).join("")}</select></div>
+        ${c.people.map(p=>{const q=person(p);return `<option value="${q.k}">${esc(q.name)} — ${esc(q.title)}</option>`;}).join("")}</select></div>
     </article>`;
   }).join("") + `</div>`;
 }
@@ -255,7 +363,7 @@ function pageBoard(c, rec, which){
 
   let seed = null;
   if(!first){
-    seed = rec.menu === "edit_ai" ? aiPlan(c, ST.version) : rec.first;
+    seed = rec.first;
     L[seed.own] = {label:"own", person:null};
     Object.keys(seed.del).forEach(i => L[i] = {label:"delegate", person:seed.del[i]});
     if(merged){ (seed.defer || [seed.wait, seed.hold]).forEach(i => L[i] = {label:"defer", person:null});
@@ -271,18 +379,14 @@ function pageBoard(c, rec, which){
    <h3>${first ? "Your first plan" : "Your final plan"}</h3>
    <p class="small muted">${first
       ? `Give each issue one label: ${rule}.`
-      : `Started from ${rec.menu === "edit_ai" ? "the AI's plan" : "your first plan"}. Change whatever you want. Same rule: ${rule}.`}</p>
+      : `Started from your first plan. Change whatever you want. Same rule: ${rule}.`}</p>
+   ${rosterHTML(c)}
    ${issueCards(c, rec, first ? "a" : "c")}
    ${merged ? holdQuestionHTML() : ""}
-   ${first ? `<div class="slider"><label for="conf">How sure are you that this plan is close to the best plan for this situation?</label>
-     <input type="range" id="conf" min="0" max="100" value="50">
-     <div class="ends"><span>Not sure at all</span><span class="val" id="cv">50</span><span>Completely sure</span></div></div>` : ""}
+   ${first ? likertHTML("conf", "How sure are you that this plan is close to the best plan for this situation?") : ""}
    <p class="err" id="e"></p>
    <button class="go" id="next">${first ? "Save my plan" : "Save final plan"}</button>
    ${meterHTML()}`, true);
-
-  if(first){ const sl = document.getElementById("conf");
-    sl.oninput = () => document.getElementById("cv").textContent = sl.value; }
 
   const repaint = wireBoard(c, L,
     () => { document.getElementById("e").textContent = "";
@@ -304,9 +408,11 @@ function pageBoard(c, rec, which){
     const p = problemWith(L);
     if(p){ rec[first ? "errA" : "errC"]++; document.getElementById("e").textContent = p; return; }
     if(merged && !pick.v){ document.getElementById("e").textContent = "Answer the question about the two you set aside."; return; }
+    const conf = first ? app().querySelector("input[name=conf]:checked") : null;
+    if(first && !conf){ document.getElementById("e").textContent = "Say how sure you are about this plan."; return; }
     const plan = toPlan(L);
     if(merged) plan.holdPick = pick.v === "none" ? null : pick.v;
-    if(first){ rec.first = plan; rec.conf1 = +document.getElementById("conf").value; rec.msA = since(); }
+    if(first){ rec.first = plan; rec.conf1 = +conf.value; rec.msA = since(); }
     else { rec.final = plan; rec.msC = since(); }
     saveLocal(ST); route();
   };
@@ -334,6 +440,7 @@ function pageAdvisor(c, rec){
   const ai = aiPlan(c, ST.version);
   paint(`${header(c)}
    <p>Your first plan is saved and cannot be changed. An AI advisor looked at the same situation.</p>
+   ${recapHTML(c, rec)}
    <div class="plans">
      <div class="plan"><h4>Your first plan</h4>${planRows(c, rec.first)}</div>
      <div class="plan"><h4>AI advisor's plan</h4>${planRows(c, ai)}
@@ -344,7 +451,6 @@ function pageAdvisor(c, rec){
      <label><input type="radio" name="m" value="keep">Keep my first plan</label>
      <label><input type="radio" name="m" value="use_ai">Use the AI's plan</label>
      <label><input type="radio" name="m" value="edit_mine">Edit my first plan</label>
-     <label><input type="radio" name="m" value="edit_ai">Edit the AI's plan</label>
    </div>
    <p class="err" id="e"></p>
    <button class="go" id="next">Continue</button>`, true);
@@ -359,31 +465,6 @@ function pageAdvisor(c, rec){
     if(v.value === "use_ai") rec.final = {own:ai.own, del:{...ai.del}, wait:ai.wait, hold:ai.hold,
                                           defer:[...ai.defer], holdPick:ai.holdPick};
     saveLocal(ST); route();
-  };
-}
-
-/* checks page ------------------------------------------------------------- */
-function pageChecks(c, rec){
-  setStep(`Situation ${ST.at+1} of ${CASES.length}`, 18 + ST.at*13);
-  paint(`${header(c)}
-   <div class="slider"><label for="c2">How sure are you that your final plan is close to the best plan?</label>
-     <input type="range" id="c2" min="0" max="100" value="50">
-     <div class="ends"><span>Not sure at all</span><span class="val" id="v2">50</span><span>Completely sure</span></div></div>
-   <div class="slider"><label for="c3">How good was the AI advisor's plan?</label>
-     <input type="range" id="c3" min="0" max="100" value="50">
-     <div class="ends"><span>Very poor</span><span class="val" id="v3">50</span><span>Excellent</span></div></div>
-   <label for="unc" class="small">Was anything in this situation unclear? What?</label>
-   <textarea id="unc" placeholder="Optional"></textarea>
-   <p style="margin-top:1rem"><button class="go" id="next">Next situation</button></p>`);
-  [["c2","v2"],["c3","v3"]].forEach(([s,v]) => {
-    const el = document.getElementById(s);
-    el.oninput = () => document.getElementById(v).textContent = el.value;
-  });
-  document.getElementById("next").onclick = () => {
-    rec.conf2 = +document.getElementById("c2").value;
-    rec.aiRating = +document.getElementById("c3").value;
-    rec.unclear = document.getElementById("unc").value.trim();
-    rec.msD = since(); ST.at++; saveLocal(ST); route();
   };
 }
 
@@ -402,6 +483,7 @@ function closing(){
      <h3>Your CAT overall percentile (optional)</h3>
      <input type="number" id="e4" min="0" max="100" step="0.01" placeholder="e.g. 98.5">
    </div>
+   ${CONFIG.contactAt === "end" ? contactHTML() : ""}
    ${CONFIG.showPilotQuestions ? `
    <h2 style="margin-top:1.8rem">Help us fix the survey</h2>
    <div class="card">
@@ -423,6 +505,7 @@ function closing(){
     const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
     const required = CONFIG.showPilotQuestions ? ["e1","e2","f1","f2","f5"] : ["e1","e2"];
     if(required.some(id => !g(id))){ document.getElementById("e").textContent = "Please answer the dropdown questions."; return; }
+    if(CONFIG.contactAt === "end"){ readContact(); ST.contact = window.__contact || null; }
     ST.end = {aiHelp:g("e1"), compare:g("e2"), guess:g("e3"), cat: g("e4") ? +g("e4") : null};
     if(CONFIG.showPilotQuestions)
       ST.pilot = {hardest:g("f1"), waitHold:g("f2"), obvious:g("f3"), ruleBind:g("f4"), length:g("f5"), other:g("f6")};
@@ -445,7 +528,7 @@ function thanks(){
    ${ok ? `<p class="small muted">Your answers were saved.</p>` : `
    <div class="card">
      <p><b>Your answers could not reach the study database from this device.</b></p>
-     <p class="small">Copy the text below and send it to the person who shared this link, or download it as a file. Nothing in it identifies you.</p>
+     <p class="small">Copy the text below and send it to the person who shared this link, or download it as a file. It holds your answers, and any contact details you chose to give.</p>
      <textarea id="dump" readonly style="min-height:6rem"></textarea>
      <p style="margin:.5rem 0 0"><button class="ghost" id="copy">Copy</button>
      <button class="ghost" id="dl">Download file</button></p>

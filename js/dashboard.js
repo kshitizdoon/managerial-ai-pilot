@@ -14,6 +14,25 @@ async function showDashboard(key){
   renderDashboard(rows, live);
 }
 
+/* Did the final plan end up at the AI's plan? Compared on the scored
+   components, not on the menu button. "use_ai" satisfies it by
+   construction, but so does a respondent who edited their own plan into
+   the AI's, and the menu label alone cannot tell you either way. */
+function samePlan(a, b, mode){
+  if(!a || !b) return false;
+  if(a.own !== b.own) return false;
+  const da = a.del || {}, db = b.del || {};
+  const ka = Object.keys(da).sort(), kb = Object.keys(db).sort();
+  if(ka.join("|") !== kb.join("|")) return false;
+  if(ka.some(k => da[k] !== db[k])) return false;
+  if(mode === "merged"){
+    const pa = [...(a.defer || [a.wait, a.hold])].sort();
+    const pb = [...(b.defer || [b.wait, b.hold])].sort();
+    return pa.join("|") === pb.join("|") && (a.holdPick ?? a.hold ?? null) === (b.holdPick ?? b.hold ?? null);
+  }
+  return a.wait === b.wait && a.hold === b.hold;
+}
+
 function personRows(raw){
   const out = [];
   raw.filter(r => r && r.done && r.cases).forEach(r => {
@@ -24,7 +43,8 @@ function personRows(raw){
       const fin = rec.final || rec.first;
       const first = scorePlan(c.id, rec.first, mode);
       const final = scorePlan(c.id, fin, mode);
-      const ai = scorePlan(c.id, aiPlan(c, r.version, mode), mode);
+      const aiP = aiPlan(c, r.version, mode);
+      const ai = scorePlan(c.id, aiP, mode);
       const both = scoreBothWays(c.id, rec.first);
       const pair = rec.first.defer && rec.first.defer.length === 2
         ? rec.first.defer : [rec.first.wait, rec.first.hold];
@@ -38,8 +58,10 @@ function personRows(raw){
         swing: splitSwing(c.id, pair),
         holdPick: rec.first.holdPick ?? rec.first.hold ?? null,
         holdScore: (rec.first.holdPick ?? rec.first.hold) ? (KEY[c.id].hold[rec.first.holdPick ?? rec.first.hold] ?? 0) : null,
-        unlisted, menu:rec.menu, conf1:rec.conf1, conf2:rec.conf2, aiRating:rec.aiRating,
-        unclear:rec.unclear, errs:(rec.errA||0)+(rec.errC||0), ownPick:rec.first.own,
+        unlisted, menu:rec.menu, conf1:rec.conf1,
+        startedApart: !samePlan(rec.first, aiP, mode),
+        endedAtAI: samePlan(fin, aiP, mode),
+        errs:(rec.errA||0)+(rec.errC||0), ownPick:rec.first.own,
         min:((rec.msA||0)+(rec.msB||0)+(rec.msC||0)+(rec.msD||0))/60000
       });
     });
@@ -95,13 +117,13 @@ function renderDashboard(raw, live){
 
   const arm = good => {
     const s = [].concat(...per.map(p => p.cases.filter(c => c.good === good)));
-    const took = s.filter(c => c.menu === "use_ai" || c.menu === "edit_ai").length;
-    return {n:s.length, took:100*took/s.length, gain:mean(s.map(c => c.final - c.first)),
+    const apart = s.filter(c => c.startedApart);
+    return {n:s.length, gain:mean(s.map(c => c.final - c.first)),
+      took: apart.length ? 100*apart.filter(c => c.endedAtAI).length/apart.length : 0,
+      tookN: apart.length,
       keep:100*s.filter(c=>c.menu==="keep").length/s.length,
       useAi:100*s.filter(c=>c.menu==="use_ai").length/s.length,
-      editMine:100*s.filter(c=>c.menu==="edit_mine").length/s.length,
-      editAi:100*s.filter(c=>c.menu==="edit_ai").length/s.length,
-      rating:mean(s.map(c=>c.aiRating))};
+      editMine:100*s.filter(c=>c.menu==="edit_mine").length/s.length};
   };
   const fg = arm(true), fb = arm(false);
   const times = per.map(p => p.totalMin);
@@ -190,10 +212,11 @@ function renderDashboard(raw, live){
 
    <h2>What people did with the AI</h2>
    <div class="scroll"><table class="data">
-     <tr><th>AI plan</th><th>Cases</th><th>Kept mine</th><th>Used AI's</th><th>Edited mine</th><th>Edited AI's</th><th>Took the AI</th><th>Mean score change</th><th>Rated the AI</th></tr>
-     <tr><td>Good</td><td>${fg.n}</td><td>${pct(fg.keep)}</td><td>${pct(fg.useAi)}</td><td>${pct(fg.editMine)}</td><td>${pct(fg.editAi)}</td><td>${pct(fg.took)}</td><td>${fmt(fg.gain)}</td><td>${fmt(fg.rating,0)}</td></tr>
-     <tr><td>Bad</td><td>${fb.n}</td><td>${pct(fb.keep)}</td><td>${pct(fb.useAi)}</td><td>${pct(fb.editMine)}</td><td>${pct(fb.editAi)}</td><td>${pct(fb.took)}</td><td>${fmt(fb.gain)}</td><td>${fmt(fb.rating,0)}</td></tr>
+     <tr><th>AI plan quality</th><th>Cases</th><th>Kept my plan</th><th>Used AI's plan</th><th>Edited my plan</th><th>Took the AI</th><th>Mean score change</th></tr>
+     <tr><td>Good</td><td>${fg.n}</td><td>${pct(fg.keep)}</td><td>${pct(fg.useAi)}</td><td>${pct(fg.editMine)}</td><td>${pct(fg.took)}</td><td>${fmt(fg.gain)}</td></tr>
+     <tr><td>Bad</td><td>${fb.n}</td><td>${pct(fb.keep)}</td><td>${pct(fb.useAi)}</td><td>${pct(fb.editMine)}</td><td>${pct(fb.took)}</td><td>${fmt(fb.gain)}</td></tr>
    </table></div>
+   <p class="small muted">Took the AI counts cases where the final plan ended up at the AI's plan on every scored part, out of the cases where the first plan was not already there (${fg.tookN} good, ${fb.tookN} bad). It is read off the plans, not off which button was pressed, so editing your own plan into the AI's counts.</p>
    <p class="small muted">Confidence before the AI correlates ${fmt(confCorr,2)} with the first-plan score — the metaknowledge check. Ability correlates ${fmt(abilityGain,2)} with the good-minus-bad change, which is your interaction, unadjusted.</p>
 
    <h2>What this means for the main run</h2>
@@ -225,7 +248,6 @@ function renderDashboard(raw, live){
    ${list("What they think the study is testing", per.map(p=>p.end&&p.end.guess))}
    ${list("Situations that seemed obvious", per.map(p=>p.pilot&&p.pilot.obvious))}
    ${list("Where the one-label rule bound", per.map(p=>p.pilot&&p.pilot.ruleBind))}
-   ${list("Unclear, by situation", [].concat(...per.map(p=>p.cases.map(c=>c.unclear?`${c.name}: ${c.unclear}`:""))))}
    ${list("Other comments", per.map(p=>p.pilot&&p.pilot.other))}
 
    <h2>Data</h2>
@@ -271,7 +293,7 @@ function toCSV(per){
   const head = ["pid","version","defer_mode","programme","experience","managed","ai_use","undergrad","cat",
     "case_id","case_name","position","ai_quality","first_score","final_score","ai_plan_score",
     "own","delegate","wait","hold","defer_set","hold_score","split_matched_key","split_worth_points",
-    "unlisted_delegates","change","menu","conf_before","conf_after","ai_rating","minutes","blocked_presses",
+    "unlisted_delegates","change","menu","conf_before","ended_at_ai","minutes","blocked_presses",
     "mda_all","mda_leave_one_out"];
   const lines = [head.join(",")];
   const r2 = x => Number.isFinite(x) ? Math.round(x*100)/100 : "";
@@ -282,7 +304,7 @@ function toCSV(per){
       c.id, c.name, c.pos, c.good ? "good" : "bad", r2(c.first), r2(c.final), r2(c.ai),
       r2(c.parts.own), r2(c.parts.del), r2(c.parts.wait), r2(c.parts.hold), r2(c.parts.set), r2(c.holdScore),
       c.splitOK === null ? "" : (c.splitOK ? 1 : 0), r2(c.swing), c.unlisted,
-      r2(c.final - c.first), c.menu, c.conf1, c.conf2, c.aiRating, r2(c.min), c.errs, r2(p.mda), r2(loo)];
+      r2(c.final - c.first), c.menu, c.conf1, c.endedAtAI ? 1 : 0, r2(c.min), c.errs, r2(p.mda), r2(loo)];
     lines.push(row.map(v => { const s = String(v == null ? "" : v);
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; }).join(","));
   }));
