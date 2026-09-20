@@ -1,165 +1,187 @@
 /* =============================================================
-   cases.js — what respondents read. Edit freely.
+   cases.js — everything respondents read.
 
-   Rules that keep the study clean, if you edit:
-   - every issue needs an entry in key.js for own / wait / hold / delegate
-   - keep the five issue texts close in length; the cards are equal size
-   - context pills may only repeat facts from the opening line
-   - the good and the bad AI plan should be about the same length
-   The page checks the first two at load and logs a warning in the console.
+   Six rules hold the six cases together. Break one and the key stops
+   meaning anything. The page checks what it can at load.
+
+   1  ONE SITUATION LINE. Time, your role, and the one horizon fact the
+      key depends on. Nothing else above the cards.
+   2  TWO SOURCES. No card states both a fact and what it implies. Who
+      is good at what lives in the roster; what happened lives on the
+      card. The respondent joins the two.
+   3  EVERY CARD SAYS THREE THINGS: what happened, what is being asked
+      of you now, and the constraint (deadline, cost of delay, or what
+      is not known). The task is clear. The priority is not.
+   4  ROSTER = FOUR OF YOUR OWN PEOPLE, title plus a one-line remit. No
+      performance history, no "has handled this before". Every roster
+      member must plausibly fit at least two issues.
+   5  NO LABEL WORDS on cards: never "urgent", "can wait", "delegate",
+      "check first", "handle yourself".
+   6  EQUAL WEIGHT. Every card 28-45 words. One clearly low-stakes issue
+      per case is deliberate, not a flaw.
    ============================================================= */
+
+/* Case-level order. The six situations are six different organisations,
+   with different people, different days and no shared timeline, so none
+   has to follow another and all six stay fully randomised. If that ever
+   changes, add {laterCaseId: [earlierCaseId, ...]} here and order.js
+   will enforce it. */
+window.CASE_AFTER = {};
 
 window.CASES = [
 {
   id: 1, name: "Launch morning", goodVersion: "A",
-  opening: "It is 9:30 AM. You manage the launch of a new consumer product in Bengaluru. The launch starts at 11:00 AM.",
-  context: [["Now","9:30 AM"],["You","Launch manager"],["Where","Bengaluru"],["Launch","11:00 AM"]],
+  opening: "It is 9:30 AM and you are the launch manager for a new consumer product in Bengaluru. The launch starts at 11:00 AM.",
+  role: "Launch manager, new consumer product",
   issues: [
     {k:"supplier",  n:"Supplier",
-     t:"Today's shipment will be 15% below the confirmed quantity. The missing units cannot arrive before tomorrow."},
+     t:"Today's shipment will arrive 15% short of the confirmed quantity, and the missing units cannot reach the warehouse before tomorrow. The supplier has to be told what we now expect, and today's dispatch re-planned around the smaller stock."},
     {k:"retailer",  n:"Key retailer",
-     t:"A key retailer asks for 400 additional units by noon for today's promotion. Only 180 of those units are expected to materially affect today's promotion."},
+     t:"A key retailer wants 400 extra units delivered by noon for a promotion running today. The warehouse can release at most 180 before the launch. The revised number has to be agreed with the retailer this morning."},
     {k:"marketing", n:"Marketing",
-     t:"Marketing asks for ₹2 lakh of additional advertising. The campaign can still be changed until 5:00 PM without penalty."},
+     t:"Marketing wants \u20b92 lakh added to today's advertising and needs a yes or no. The campaign is already live at the agreed spend, and the booking can be changed or cancelled without penalty until 5:00 PM."},
     {k:"quality",   n:"Quality",
-     t:"Two batches have a mismatch between the warehouse label and the quality record. It is not yet known whether the products are affected. If affected units are dispatched before verification, the expected recall exposure can be high."},
+     t:"Two batches show a mismatch between the warehouse label and the quality record. Whether those units meet specification will not be known until the batch records are pulled. Both batches are on the 11:00 AM dispatch list."},
     {k:"ops",       n:"Operations",
-     t:"Operations proposes skipping the final quality check to avoid a dispatch delay. The check is required before dispatch under the normal procedure."}],
-  people: [["arjun","Arjun","Supplier and logistics"],["priya","Priya","Retailer"],
-           ["meera","Meera","Quality and data"],["kabir","Kabir","Marketing"]],
+     t:"The dispatch supervisor wants to skip the final pre-dispatch check to save 40 minutes and has asked for a decision before loading starts. The check is required under the standard dispatch procedure."}],
+  people: [["arjun","Arjun","Logistics manager \u2014 inbound shipments and dispatch scheduling"],
+           ["priya","Priya","Key accounts manager \u2014 single point of contact for the large retailers"],
+           ["meera","Meera","Quality manager \u2014 signs off pre-dispatch checks, keeps the batch records"],
+           ["kabir","Kabir","Marketing manager \u2014 runs the launch campaign and its budget"]],
   ai: {
     A:{own:"ops", del:{supplier:"arjun", retailer:"priya"}, wait:"marketing", hold:"quality",
-       why:"Keep the final quality check and deal with the operations request yourself. Do not dispatch the two batches until the quality record is checked. Priya and Arjun can manage the retailer and supplier, and the advertising can be changed until 5 PM."},
-    B:{own:"marketing", del:{retailer:"priya", supplier:"arjun"}, wait:"ops", hold:"quality",
-       why:"The retailer request matters most today, so ask Priya to handle it and Arjun to manage the supplier shortage. Approve the additional advertising yourself to protect launch momentum. The dispatch process can be reviewed after the launch."}}
+       why:"Answer the dispatch supervisor yourself and keep the required check. Nothing from those two batches should move until the records are pulled. Arjun can re-plan around the short shipment and Priya can settle the revised number with the retailer. The advertising decision costs nothing before 5 PM."},
+    B:{own:"retailer", del:{supplier:"arjun", marketing:"kabir"}, wait:"quality", hold:"ops",
+       why:"The retailer promotion is running today, so take that conversation yourself and protect the launch. Arjun can handle the short shipment and Kabir can release the extra spend while the campaign is live. The label mismatch can be reconciled after dispatch, once the morning is clear."}}
 },
+
 {
   id: 2, name: "Strong employee", goodVersion: "B",
-  opening: "It is 8:50 AM. You manage a 10-person project team. Ananya has been one of the strongest performers on the team, but she has missed two deadlines in the last month. A major client presentation is tomorrow.",
-  context: [["Now","8:50 AM"],["You","Manager, 10-person project team"],
-            ["Ananya","A strong performer; two missed deadlines in the last month"],
-            ["Client presentation","Tomorrow"]],
+  opening: "It is 8:50 AM and you manage a 10-person analytics team. A major client presentation is tomorrow.",
+  role: "Manager, 10-person analytics team",
   issues: [
     {k:"client",  n:"Client",
-     t:"Two recent deliverables contained avoidable errors. The client wants a response before 11:00 AM."},
+     t:"Two recent deliverables went out with avoidable errors. The client has asked in writing what went wrong, has copied the partner on the account, and wants a reply before 11:00 AM."},
     {k:"ananya",  n:"Ananya",
-     t:"Ananya says she has been working late for several weeks and is struggling with the workload."},
+     t:"Ananya, one of your strongest performers, has missed two deadlines this month. Sara has asked whether to move part of her work to someone else before tomorrow. Nobody has yet looked at what is on her plate."},
     {k:"finance", n:"Finance",
-     t:"The project is 6% over budget. An explanation is due by 4:00 PM."},
+     t:"The project is 6% over budget and finance needs a written explanation by 4:00 PM. If it misses the cut-off, this month's invoice to the client is held back until the next cycle."},
     {k:"data",    n:"Data discrepancy",
-     t:"One number in tomorrow's presentation does not reconcile with the source data."},
+     t:"One number in tomorrow's presentation does not match the source file. Someone has to work out whether the slide or the source is wrong and correct it before the deck is locked tonight."},
     {k:"partner", n:"Partner request",
-     t:"A two-page note on a new market is requested by 5:00 PM."}],
-  people: [["riya","Riya","Client"],["mehul","Mehul","Data"],
-           ["kabir","Kabir","Budget"],["sara","Sara","People and workload"]],
+     t:"A partner has asked for a two-page note on a new market by 5:00 PM today. It feeds a proposal that goes out at the end of next month."}],
+  people: [["riya","Riya","Engagement manager \u2014 your deputy on client-facing work and client communication"],
+           ["mehul","Mehul","Senior analyst \u2014 builds and checks the numbers behind the deliverables"],
+           ["varun","Varun","Project finance analyst \u2014 budgets, billing and cost explanations"],
+           ["sara","Sara","Team operations lead \u2014 staffing, workload allocation and leave"]],
   ai: {
-    B:{own:"data", del:{client:"riya", finance:"kabir"}, wait:"partner", hold:"ananya",
-       why:"Check the number in tomorrow's presentation yourself. Make no decision about Ananya until you know whether workload caused the missed deadlines. Riya can reply to the client before 11 AM and Kabir can explain the budget; the market note can wait."},
-    A:{own:"client", del:{data:"mehul", finance:"kabir"}, wait:"ananya", hold:"partner",
-       why:"Ananya has historically been one of the strongest performers, so I would not reduce her responsibilities; ask her to improve execution. Protect the client relationship first and reply yourself. Mehul can fix the number and Kabir the budget; the market note can wait for now."}},
-
-  /* In merged mode the weak plan above stops being weak: its only flaw is
-     the wait/hold split, which merged scoring does not look at. This is the
-     weak plan for merged mode. Keep both in step if you edit the case. */
-  aiMerged: {
-    B:{own:"data", del:{client:"riya", finance:"kabir"}, defer:["partner","ananya"], holdPick:"ananya",
-       why:"Check the number in tomorrow's presentation yourself. Make no decision about Ananya until you know whether workload caused the missed deadlines. Riya can reply to the client before 11 AM and Kabir can explain the budget; the market note can wait."},
-    A:{own:"client", del:{partner:"riya", finance:"kabir"}, defer:["data","ananya"], holdPick:"ananya",
-       why:"Protect the client relationship first and reply yourself; two bad deliverables need a senior voice. Riya can write the market note and Kabir can explain the budget. The presentation number and Ananya's workload can both sit until the client is settled."}}
+    B:{own:"client", del:{data:"mehul", finance:"varun"}, wait:"partner", hold:"ananya",
+       why:"Reply to the client yourself; the partner is copied and the errors are yours to explain. Mehul can settle the number before the deck is locked and Varun can write the budget explanation. Decide nothing about Ananya's work until somebody has actually looked at what she is carrying."},
+    A:{own:"ananya", del:{client:"riya", finance:"varun"}, wait:"data", hold:"partner",
+       why:"Speak to Ananya yourself and take work off her before tomorrow; a strong performer under strain is worth protecting. Riya can reply to the client and Varun can write the budget explanation. The presentation number can be reconciled tomorrow, and the market note needs more input first."}}
 },
+
 {
-  id: 3, name: "Monday project team", goodVersion: "B",
-  opening: "It is 9:00 AM. You lead a 12-person project team. Five things need attention.",
-  context: [["Now","Monday, 9:00 AM"],["You","Lead, 12-person project team"]],
+  id: 3, name: "Monday project team", goodVersion: "A",
+  opening: "It is 9:00 AM on Monday. You lead a 12-person consulting project team, formed after last year's engagement for this client ended.",
+  role: "Lead, 12-person consulting project team",
   issues: [
     {k:"analysis",  n:"Client analysis",
-     t:"A client needs a revised analysis by 1:00 PM. It requires background on the client's cost structure that only you and Sanjay have. Sanjay is away today."},
+     t:"A client wants a revised cost analysis by 1:00 PM today. It has to use the assumptions agreed with the client during last year's engagement, which were never written down. You ran that engagement."},
     {k:"dashboard", n:"Live dashboard",
-     t:"A number on a client-facing dashboard looks wrong. The underlying data are available, but someone needs to identify whether the problem is in the source data or the dashboard calculation."},
+     t:"A number on a client-facing dashboard looks wrong. Someone has to work out whether the error is in the source data or in the dashboard calculation, and correct it today."},
     {k:"hires",     n:"New hires",
-     t:"Two people joining next week need their documents sent by 6 PM today."},
+     t:"Two people join next week. Their joining documents and IT access have to be raised by 6:00 PM today, or their first day moves back by a week."},
     {k:"event",     n:"Team event",
-     t:"Friday's team event needs an agenda. The venue and speakers are already confirmed."},
+     t:"Friday's team event needs an agenda circulated to the team before Thursday. The venue and the speakers are already confirmed and paid for."},
     {k:"software",  n:"Software",
-     t:"A ₹3 lakh annual software subscription renews in two weeks. You can cancel it any time before then."}],
-  people: [["tara","Tara","Client delivery, on this account for two weeks"],
-           ["imran","Imran","Dashboard and pipeline"],["neel","Neel","Joining paperwork"],
-           ["maya","Maya","General project support"]],
+     t:"A \u20b93 lakh annual software subscription renews in two weeks and finance wants a renew-or-cancel decision from you. How many people still use it is not recorded anywhere; pulling the usage data takes a day."}],
+  people: [["tara","Tara","Consultant \u2014 joined this client account two weeks ago"],
+           ["imran","Imran","Data engineer \u2014 owns the team's dashboards and data pipelines"],
+           ["neel","Neel","Team administrator \u2014 joining formalities, IT access, vendor paperwork"],
+           ["maya","Maya","Business analyst \u2014 floats across projects, currently between assignments"]],
   ai: {
-    B:{own:"analysis", del:{dashboard:"imran", hires:"neel"}, wait:"event", hold:"software",
-       why:"Do the client analysis yourself: only you have the cost background, and Sanjay is away. Imran can trace the dashboard error and Neel can send the joining documents. Check how many people use the software before deciding; the event agenda can wait."},
-    A:{own:"dashboard", del:{analysis:"tara", hires:"neel"}, wait:"software", hold:"event",
-       why:"Fix the client dashboard yourself first because the wrong number is visible to the client. Give the client analysis to Tara so it still lands by 1 PM, and ask Neel to handle the joining documents. The software can wait, since you can cancel any time."}}
+    A:{own:"analysis", del:{dashboard:"imran", hires:"neel"}, wait:"event", hold:"software",
+       why:"Write the client analysis yourself. The assumptions were never written down and nobody now on the team was on last year's engagement, so handing it over cannot meet 1 PM. Imran can trace the dashboard error and Neel can raise the joining paperwork. Give finance no answer on the subscription until the usage data is in."},
+    B:{own:"dashboard", del:{hires:"neel", software:"maya"}, wait:"event", hold:"analysis",
+       why:"Fix the dashboard yourself first; a wrong number is sitting in front of the client right now. Neel can raise the joining paperwork and Maya can take the renewal decision to finance. The revised analysis should wait until the client confirms the assumptions it has to use."}}
 },
+
 {
-  id: 4, name: "Friday support team", goodVersion: "A",
-  opening: "It is 3:00 PM on Friday. You lead a 20-person customer support team.",
-  context: [["Now","Friday, 3:00 PM"],["You","Lead, 20-person support team"]],
+  id: 4, name: "Friday support team", goodVersion: "B",
+  opening: "It is 3:00 PM on Friday and you lead a 20-person customer support team.",
+  role: "Lead, 20-person customer support team",
   issues: [
     {k:"complaint", n:"Customer complaint",
-     t:"A customer says one of your agents was rude. The call was recorded, but nobody has reviewed it."},
-    {k:"warning",   n:"Formal warning",
-     t:"Meher, the team lead who reported the complaint, asks you to approve a written warning today. The warning stays on the employee record and cannot later be withdrawn."},
+     t:"One of your two largest clients says an agent in Meher's pod was rude on yesterday's call. The call was recorded and nobody has listened to it yet. The client expects a reply from you today."},
+    {k:"warning",   n:"Formal warning", after:["complaint"],
+     t:"Meher has asked you to approve a written warning for that agent today, on the strength of the client's account alone. A written warning stays on the employee's record and cannot be withdrawn."},
     {k:"overtime",  n:"Overtime",
-     t:"Overtime claims must be submitted by 5:00 PM. Missing the cut-off delays payment by one month."},
+     t:"This month's overtime claims must be submitted by 5:00 PM and three entries do not match the shift records. Missing the cut-off delays payment to those agents by one month."},
     {k:"meeting",   n:"Client meeting",
-     t:"A client asks to move Monday's review meeting to Tuesday."},
+     t:"A client asks to move Monday's review meeting to Tuesday. Tuesday works for the team, though one project lead cannot attend and would have to send written notes instead."},
     {k:"shifts",    n:"Shift schedule",
-     t:"An agent says the shift system has been double-booking people for the last two weeks. Ashok manages the system."}],
-  people: [["ashok","Ashok","Shift system"],["meher","Meher","Team lead, reported the complaint"],
-           ["zoya","Zoya","Payroll"],["karan","Karan","Client relationships"]],
+     t:"Three shifts next week have been double-booked and the roster has to be corrected before Monday morning. The agents affected have already been told there is a clash."}],
+  people: [["meher","Meher","Team leader \u2014 runs one of the four support pods"],
+           ["ashok","Ashok","Workforce planner \u2014 owns the rostering system and shift allocation"],
+           ["zoya","Zoya","Payroll coordinator \u2014 processes overtime claims and monthly payroll"],
+           ["karan","Karan","Account manager \u2014 handles the relationship with the two largest clients"]],
   ai: {
-    A:{own:"complaint", del:{overtime:"zoya", shifts:"ashok"}, wait:"meeting", hold:"warning",
-       why:"Do not approve the warning until the call recording is reviewed; it cannot be withdrawn later. Oversee that review yourself, since Meher raised the complaint. Zoya can submit overtime before 5 PM, Ashok can check the shift system, and the meeting change can wait."},
-    B:{own:"warning", del:{complaint:"meher", overtime:"zoya"}, wait:"meeting", hold:"shifts",
-       why:"Approve the written warning today. Acting quickly on a customer complaint shows that standards are enforced, and Meher is closest to the situation. The recording can be reviewed afterwards if the agent disputes it. Zoya can submit the overtime claims."}}
+    B:{own:"complaint", del:{overtime:"zoya", shifts:"ashok"}, wait:"meeting", hold:"warning",
+       why:"Take the complaint yourself and listen to the recording before anything else happens; the person who raised it also runs the agent's pod. Approve no warning until you have heard the call, because it cannot be withdrawn. Zoya can clear the claims and Ashok can fix the roster."},
+    A:{own:"warning", del:{complaint:"meher", overtime:"zoya"}, wait:"shifts", hold:"meeting",
+       why:"Approve the warning today. Acting in the same week shows the client that standards are enforced, and Meher is closest to what happened. Zoya can clear the overtime claims before 5 PM. The roster clash can be picked up on Monday, and the meeting move needs the project lead's view first."}}
 },
+
 {
-  id: 5, name: "University outreach", goodVersion: "A",
-  opening: "It is 10:00 AM on Monday at a famous management institute. You coordinate an outreach programme across several cities. Applications from one city fell 22% last month. The quarter ends in three weeks.",
-  context: [["Now","Monday, 10:00 AM"],["You","Outreach coordinator, several cities"],
-            ["One city","Applications fell 22% last month"],["Quarter ends","In three weeks"]],
+  id: 5, name: "Fest week", goodVersion: "A",
+  opening: "It is 10:00 AM on Monday. You head the student organising committee for your institute's annual fest, which opens in three weeks.",
+  role: "Head of the fest organising committee",
   issues: [
-    {k:"city",        n:"City performance",
-     t:"Applications in one city fell 22%. A competing university launched a campaign, and your most experienced student coordinator left at about the same time. Deciding the response is yours."},
-    {k:"waiver",      n:"Fee waiver",
-     t:"A partner asks for a 10% fee waiver this week. Once announced, the waiver must remain for six months."},
-    {k:"analysis",    n:"Analysis",
-     t:"Your analytics team can spend two days checking whether the fall came mainly from the competitor campaign or from the vacant coordinator role."},
-    {k:"coordinator", n:"New coordinator",
-     t:"A new coordinator joins in two weeks. The onboarding plan needs approval."},
-    {k:"travel",      n:"Travel request",
-     t:"A team member asks for approval of a ₹30,000 travel budget that is within the normal limit."}],
-  people: [["prakash","Prakash","Analytics"],["sonia","Sonia","People operations"],
-           ["imtiaz","Imtiaz","Partner relationships"],["kavita","Kavita","Finance and admin"]],
+    {k:"drop",        n:"Registrations",
+     t:"Registrations from one large partner campus are 22% below last year. A rival fest moved to the same weekend, and your coordinator on that campus quit in the same week. \u20b91.5 lakh of publicity budget is unspent and the committee wants your decision on where it goes."},
+    {k:"sponsor",     n:"Sponsor fee",
+     t:"Your largest sponsor asks for a 10% cut in their fee and wants an answer this week. The fee is tied to expected footfall, and registrations do not close for another week. Whatever rate you agree holds for the next two fests."},
+    {k:"diagnosis",   n:"Registration data", after:["drop"],
+     t:"A campus-by-campus pull of two years of registration history would show whether the drop tracks the rival fest's dates or the coordinator's exit. It takes two days of work and nobody has started it."},
+    {k:"coordinator", n:"New coordinator", after:["drop"],
+     t:"A replacement coordinator for that campus starts in two weeks and her induction plan needs sign-off before she begins. The plan itself has already been drafted."},
+    {k:"travel",      n:"Travel money",
+     t:"A volunteer team asks for \u20b930,000 to visit two partner campuses next week. The amount sits inside a budget line that is already approved for campus outreach."}],
+  people: [["prakash","Prakash","Registrations and analytics \u2014 keeps the registration data"],
+           ["sonia","Sonia","Volunteer coordinator \u2014 recruits and schedules the volunteer teams"],
+           ["imtiaz","Imtiaz","Sponsorship lead \u2014 negotiates and signs the sponsor agreements"],
+           ["kavita","Kavita","Finance and logistics \u2014 budget, vendor payments, venue bookings"]],
   ai: {
-    A:{own:"city", del:{analysis:"prakash", travel:"kavita"}, wait:"coordinator", hold:"waiver",
-       why:"Do not announce the waiver yet: it stays for six months, and the fall may come from the vacant coordinator role. Ask Prakash to run the two-day analysis, and decide the city response yourself. Kavita can approve the travel; the onboarding plan can wait."},
-    B:{own:"waiver", del:{city:"imtiaz", travel:"kavita"}, wait:"analysis", hold:"coordinator",
-       why:"Give the partner the 10% waiver now. A 22% fall means you are losing students on price, and three weeks is not long enough to wait. Imtiaz can lead the city response. The analysis can tell you what to do next cycle."}}
+    A:{own:"drop", del:{diagnosis:"prakash", travel:"kavita"}, wait:"coordinator", hold:"sponsor",
+       why:"Decide the publicity spend yourself; two causes are tangled together and the money is committed once. Prakash can pull the registration history and Kavita can release the travel money from the approved line. Agree no sponsor rate this week, because it locks the next two fests to a footfall nobody has estimated."},
+    B:{own:"sponsor", del:{drop:"imtiaz", travel:"kavita"}, wait:"diagnosis", hold:"coordinator",
+       why:"Close the sponsor yourself this week. Registrations are down, so a committed sponsor is worth more than the 10%, and the relationship carries into the next two fests. Imtiaz can work the weak campus and Kavita can clear the travel. The history pull and the induction plan can both come later."}}
 },
+
 {
   id: 6, name: "Day before travel", goodVersion: "B",
-  opening: "It is 9:00 AM on Thursday in an FMCG giant. You lead a 15-person operations team and leave tomorrow for a three-day site visit.",
-  context: [["Now","Thursday, 9:00 AM"],["You","Lead, 15-person operations team"],
-            ["Travel","Leave tomorrow, three days"]],
+  opening: "It is 9:00 AM on Thursday. You lead a 15-person operations team and you leave tomorrow morning for a three-day site visit.",
+  role: "Lead, 15-person operations team",
   issues: [
-    {k:"form",     n:"Required form",
-     t:"A form requiring the unit head's personal signature is due Friday while you are travelling. No one else is authorised to sign."},
-    {k:"customer", n:"Customer issue",
-     t:"A mid-size B2B customer is unhappy with response times. Harish has handled three similar complaints successfully."},
+    {k:"form",     n:"Compliance form",
+     t:"A compliance form is due on Friday and the authority to sign it sits with the unit head personally, which is you. A late filing is reported to the regulator and carries a penalty."},
+    {k:"customer", n:"Customer escalation",
+     t:"A mid-size B2B customer has escalated twice this month about response times and wants a call back today. Their contract comes up for renewal next quarter."},
     {k:"panel",    n:"Interview panel",
-     t:"Tomorrow's interview panel needs one more member. Omar and Naina are both qualified."},
+     t:"Tomorrow's interview panel is one member short and HR needs a name before the end of today. The candidates have already been told the panel's timing."},
     {k:"supplier", n:"Supplier offer",
-     t:"A supplier offers 5% off for a two-year commitment. The offer stays open for one month. Next year's volume forecast is not yet available."},
+     t:"A supplier offers 5% off list price for a two-year commitment and the offer stays open for a month. Next year's volumes are fixed in the annual plan the board approves at the end of this month."},
     {k:"report",   n:"Monthly report",
-     t:"A report is needed in ten days. All the information is already available."}],
-  people: [["harish","Harish","Service lead"],["naina","Naina","Recruiting"],
-           ["bhavna","Bhavna","Finance analyst"],["omar","Omar","Senior colleague, qualified panellist"]],
+     t:"The monthly operations report is due in ten days. Every number it needs is already in the reporting pack and nothing else depends on it."}],
+  people: [["harish","Harish","Service lead \u2014 owns escalations from mid-size accounts"],
+           ["naina","Naina","Recruitment manager \u2014 runs the hiring process and sits on interview panels"],
+           ["bhavna","Bhavna","Finance analyst \u2014 cost analyses and the monthly reporting pack"],
+           ["omar","Omar","Operations manager at your level \u2014 covers for you when you travel"]],
   ai: {
     B:{own:"form", del:{customer:"harish", panel:"naina"}, wait:"report", hold:"supplier",
-       why:"Sign the form yourself today: no one else can sign it, and you are away on Friday. Harish has handled three similar complaints, so give him the customer. Do not commit to the supplier until next year's forecast is in; the report has ten days."},
+       why:"Sign the form today. Nobody else holds that authority and you are away when it falls due. Harish can call the customer back and Naina can complete the panel before HR closes the list. Commit to nothing on the supplier offer until the board fixes next year's volumes."},
     A:{own:"customer", del:{form:"bhavna", panel:"naina"}, wait:"supplier", hold:"report",
-       why:"Take the customer issue yourself. When a customer is unhappy, it needs to come from the manager. Ask Bhavna to handle the required form and Naina to sit on the panel. The supplier offer is open for a month, so it can wait."}}
+       why:"Call the customer yourself; a second escalation before a renewal needs to come from the manager. Bhavna can file the compliance form and Naina can complete the panel. The supplier offer is open for a month, and the report can sit until the month-end numbers are locked."}}
 }
 ];

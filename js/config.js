@@ -24,6 +24,15 @@ window.CONFIG = {
      Set includeHoldInCaseScore true to fold it back in as a 4th part.     */
   includeHoldInCaseScore: false,
 
+  /* ---- Name and mobile -------------------------------------------------
+     "end"   asked on the last screen, for the prize draw.  (default)
+     "start" asked on the first screen, before any decision is made.
+     "off"   not asked at all.
+     Default is "end" on purpose: a managerial-judgement task carrying the
+     respondent's name is answered more carefully and more conventionally,
+     and that lands in the outcome you are measuring.                       */
+  contactAt: "end",
+
   /* ---- Fielding --------------------------------------------------------ies */
   randomiseCaseOrder: true,   // order of the six cases
   randomiseCardOrder: true,   // order of the five cards inside a case

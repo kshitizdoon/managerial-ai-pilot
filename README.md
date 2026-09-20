@@ -16,6 +16,7 @@ Plain HTML, CSS and JavaScript. No build step, no framework.
 | `js/config.js` | The knobs: deferral mode, scoring defaults, randomisation, dashboard key. Start here. |
 | `js/cases.js` | Everything respondents read: situations, issues, delegate rosters, both AI plans. |
 | `js/key.js` | The scoring key. Not shown to anyone. |
+| `js/order.js` | Constrained randomisation: shuffles cases and cards, keeps declared `after` constraints, and validates them. |
 | `js/scoring.js` | Turns a plan into scores. Both deferral modes. |
 | `js/stats.js` | Alpha, correlations, power arithmetic. |
 | `js/storage.js` | Where responses go. |
@@ -23,6 +24,7 @@ Plain HTML, CSS and JavaScript. No build step, no framework.
 | `js/dashboard.js` | The results view. |
 | `css/styles.css` | All styling, with the rules that keep the cards neutral. |
 | `netlify/functions/responses.mjs` | Stores and returns responses. |
+| `make-docs.js` | `node make-docs.js` regenerates `docs/instrument.md` from the cases and the key. |
 | `build.py` | Optional. Bundles everything into `dist/index.html` for a single-file copy. |
 
 ## Run it on your laptop
@@ -93,34 +95,107 @@ balanced. Context pills may only repeat facts from the opening line.
 **Scores** → `js/key.js`. Every issue needs an `own`, `wait`, `hold` and
 `del` entry. The page warns in the console if one is missing.
 
+**Rosters** → the third field of each person is `Title — remit`, split on
+the em dash. The dropdown shows the name and title; the roster panel above
+the board shows the remit. Keep the em dash or the split fails.
+
 **How the deferral question is asked** → `deferMode` in `js/config.js`, or
 add `?defer=merged` to the link for one participant. The mode used is
 stored with every response, so you can field both in one pilot.
 
+**Name and mobile** → `contactAt` in `js/config.js`: `"end"` (default),
+`"start"` or `"off"`. The default is the last screen. A managerial
+judgement task that carries the respondent's name before any decision is
+made gets answered more carefully and more conventionally, and that lands
+in the outcome you are measuring.
+
 ---
 
-## Why the board looks the way it does
+## What order respondents see things in
 
-The visual briefing is meant to cut reading, not thinking. Every choice
-below exists to stop the layout from answering the question for the
-respondent.
+Case order is randomised. The six situations are six different
+organisations with different people, different days and no shared
+timeline, so no case has to follow another and all 720 orders can occur.
+
+Card order inside a case is randomised too, except where one card only
+reads correctly after another. Three pairs are declared, all of them
+anaphora: a card that says "that agent", "the drop" or "that campus" is
+unreadable before the card that introduces the agent, the drop or the
+campus.
+
+| Case | Constraint | Orders still possible |
+| --- | --- | --- |
+| 4 Friday support team | complaint before warning | 60 of 120 |
+| 5 Fest week | drop before diagnosis, drop before coordinator | 40 of 120 |
+| all others | none | 120 of 120 |
+
+Declare a constraint by adding `after:["otherKey"]` to an issue in
+`cases.js`, or `CASE_AFTER = {laterId:[earlierId]}` for whole cases.
+`order.js` enforces it, the shuffle stays uniform over the orders that
+satisfy it, and `checkOrderRules()` refuses to stay quiet if a constraint
+names something that does not exist or forms a loop: the console gets an
+error and a red band appears at the top of the page.
+
+The order each respondent got is stored on their response, and both the
+recap before the AI advice and the final-plan board replay that same
+order. Nothing is reshuffled between screens.
+
+## How a case is built
+
+Six rules keep the six cases consistent. They are in the header of
+`cases.js`, and the load-time check enforces what a machine can check.
+
+1. **One situation line.** Time, your role, and the one horizon fact the
+   key depends on. No pill strip, no second box.
+2. **Two sources.** No card states both a fact and what it implies. What
+   happened is on the card; who is good at what is in the roster. The
+   respondent has to join the two. This is the rule that removes the
+   giveaways without removing the answer.
+3. **Every card says three things:** what happened, what is being asked of
+   you now, and the constraint — a deadline, a cost of delay, or a fact
+   nobody has yet. The task is clear. The priority is not.
+4. **The roster is four of your own people**, each a title plus a one-line
+   remit, and every person has to plausibly fit at least two issues. No
+   clients, no outsiders, no track records.
+5. **No label words on cards.** Never "urgent", "can wait", "delegate",
+   "check first", "handle yourself".
+6. **Equal weight.** Every card runs 28 to 45 words. One clearly
+   low-stakes issue per case is deliberate: without it the allocation rule
+   has no slack and the key gets noisy.
+
+### Why the board looks the way it does
 
 | Requirement | How the build meets it |
 | --- | --- |
-| Preserve every fact in the key | Issue text is the case text, word for word. Nothing is summarised. |
-| Add nothing | Context pills repeat only the opening line. There are no computed tags, risk levels, countdowns or icons. |
-| Keep the uncertainty | Sentences such as "it is not yet known whether the products are affected" stay intact and unmarked. |
-| No highlight on the right issue | One card style: same border, same background, same padding, same type size, same heading weight. Cards stretch to a common height, so a long issue and a short issue occupy the same space. |
-| No red-means-danger | Colour never attaches to an issue. The four hues belong to the respondent's own labels, and none of them is red or green. |
-| Animation implies no priority | One fade, all five cards at once, 220 ms. No stagger, no sequence, no motion after load. `prefers-reduced-motion` turns it off. |
-| No ordering cue | Card order is shuffled per respondent and recorded, so position cannot be confounded with the key. |
-| Wording does not hint at the label | Issue text is unchanged from the instrument you piloted, and the four labels are described once, in the instructions, in the same amount of detail. |
-| Good and weak AI plans look identical | Same layout, same row order, same type, same length of reason text. The version is decided by a coin flip and never shown. |
+| Preserve every fact in the key | Issue text is the only place case facts live, and the key scores nothing that is not written on a card or in the roster. |
+| Add nothing | No computed tags, risk levels, countdowns or icons. |
+| Keep the uncertainty | Sentences such as "whether those units meet specification will not be known until the batch records are pulled" stay intact and unmarked. |
+| No highlight on the right issue | One card style: same border, background, padding, type size and heading weight. Cards stretch to a common height. |
+| No red-means-danger | Colour never attaches to an issue. The four hues belong to the respondent's own labels, and none is red or green. |
+| Animation implies no priority | One fade, all five cards at once, 220 ms, no stagger. `prefers-reduced-motion` turns it off. |
+| No ordering cue | Card order is shuffled per respondent and recorded. |
+| Good and weak AI plans look identical | Same layout, same row order, same type, same length of reason text. |
 
-What the design actually removes: the table-to-form mapping. In the old
-version a respondent read a table, then scrolled to a separate form and had
-to remember which row was which. Now the choice sits on the card that
-states the issue, and the allocation counter is always visible.
+What the design removes is the table-to-form mapping: the choice sits on
+the card that states the issue, the roster sits above the board, and the
+allocation counter is always visible.
+
+---
+
+## Documentation
+
+`node make-docs.js` writes `docs/instrument.md` from `cases.js` and
+`key.js`: every case as respondents read it, every roster, both AI plans
+with their text, and the full key with all four delegate scores per issue.
+Regenerate it after any edit so the write-up cannot drift from the
+instrument.
+
+**Accuracy of an AI plan** is that plan's own score under the key, on the
+same 0-100 scale as a respondent's plan. It is a property of the advice,
+not a probability, and it is never shown to respondents. Use the number as
+AIQuality rather than a good/weak dummy: the weak plans are not equally
+weak, and the continuous version makes the interaction readable per point
+of advice quality.
 
 ---
 
@@ -136,17 +211,22 @@ flipping only that split moves the case score by:
 
 | Case | Mean swing | Largest swing |
 | --- | --- | --- |
-| Launch morning | 20.5 | 47.5 |
-| Strong employee | 22.8 | 42.5 |
-| Monday project team | 16.3 | 32.5 |
-| Friday support team | 25.5 | 47.5 |
-| University outreach | 25.5 | 45.0 |
-| Day before travel | 13.0 | 27.5 |
+| Launch morning | 21.8 | 47.5 |
+| Strong employee | 19.3 | 40.0 |
+| Monday project team | 15.8 | 31.3 |
+| Friday support team | 23.3 | 45.0 |
+| Fest week | 22.8 | 40.0 |
+| Day before travel | 13.5 | 30.0 |
 
-Across all valid plans, the Wait and Hold parts carry 55 to 74 per cent of
-the variance in the case score, against 26 to 42 per cent for Own and
-Delegate together. If respondents cannot tell the two labels apart, a coin
-toss is driving most of your ability measure.
+Across all 960 valid plans per case, the Wait and Hold parts carry 57 to
+70 per cent of the variance in the case score, against 30 to 43 per cent
+for Own and Delegate together. Listing all four people on every issue
+raised the delegate part's spread from almost nothing to an SD of 19 to 24
+points, which is why Own and Delegate now hold a third rather than a
+quarter. It did not fix the imbalance: Wait and Hold are two of the four
+components and each spans the full 0 to 100 range. If respondents cannot
+tell the two labels apart, a coin toss is still driving most of your
+ability measure.
 
 The results view reports how often the split matched the key. Below about
 two thirds, treat the distinction as unreliable and switch
@@ -158,22 +238,23 @@ scored separately instead of silently carrying a fifth of the score.
 
 Two consequences of that switch, both handled in the code:
 
-- Case 2's weak AI plan is weak only in its Wait/Hold split, so merged
-  scoring makes it nearly as good as the strong plan. `cases.js` carries a
-  separate `aiMerged` plan for that case. The load-time check warns you if
-  any case's two plans fall within 15 points in the mode you are fielding.
+- Every weak AI plan now sets aside at least one issue that should not be
+  set aside, so the manipulation survives merged scoring. The narrowest
+  gap is 20 points (Strong employee) against 31 to 57 under split scoring.
+  The load-time check still warns if any case's two plans fall within 15
+  points in the mode you are fielding.
 - Merged scoring changes what the case score means, so do not mix the two
   modes inside one analysis. The mode is stored on every response.
 
 ### Do you need two delegations?
 
 Keep two: the allocation is what makes the task triage rather than a
-ranking. But the *person* choice is mostly free points as the key stands.
-In Cases 1 and 2 four of the five issues list exactly one person, so
-picking the obvious name scores 100 and anyone else scores whatever
-`unlistedDelegateScore` says, which is 0 today. That is a hundred-point
-cliff for a choice nothing in the case rules out: nothing says Priya cannot
-chase the supplier.
+ranking. The free-points problem is fixed in the key — every issue now
+carries a score for all four people, so choosing a defensible alternative
+costs points instead of falling off a cliff, and `unlistedDelegateScore`
+only applies if you add a person and forget to key them.
+
+What is left to check is whether the person choice measures anything.
 
 Two things to decide from the pilot:
 

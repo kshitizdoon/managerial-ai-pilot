@@ -128,6 +128,16 @@ function checkKey(){
   aiQualityGaps().forEach(g => {
     if(g.gap < 15) problems.push(`case ${g.id} (${g.name}): in "${activeMode()}" mode the good and bad AI plans are only ${g.gap.toFixed(1)} points apart. The manipulation is too weak to estimate anything from. Give this case an aiMerged plan in cases.js.`);
   });
-  if(problems.length) console.warn("Instrument check:\n" + problems.join("\n"));
+  problems.push(...checkOrderRules());
+  if(problems.length){
+    console.error("Instrument check failed:\n" + problems.join("\n"));
+    try{
+      const b = document.createElement("div");
+      b.className = "devwarn";
+      b.innerHTML = "<b>Instrument check failed \u2014 fix before fielding</b><ul>" +
+        problems.map(p => "<li>" + p + "</li>").join("") + "</ul>";
+      document.body.insertBefore(b, document.body.firstChild);
+    }catch(e){}
+  }
   return problems;
 }
