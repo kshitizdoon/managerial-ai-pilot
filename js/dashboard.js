@@ -101,7 +101,7 @@ function renderDashboard(raw, live){
       useAi:100*s.filter(c=>c.menu==="use_ai").length/s.length,
       editMine:100*s.filter(c=>c.menu==="edit_mine").length/s.length,
       editAi:100*s.filter(c=>c.menu==="edit_ai").length/s.length,
-      rating:null};
+      rating:mean(s.map(c=>c.aiRating))};
   };
   const fg = arm(true), fb = arm(false);
   const times = per.map(p => p.totalMin);
@@ -191,8 +191,8 @@ function renderDashboard(raw, live){
    <h2>What people did with the AI</h2>
    <div class="scroll"><table class="data">
      <tr><th>AI plan</th><th>Cases</th><th>Kept mine</th><th>Used AI's</th><th>Edited mine</th><th>Edited AI's</th><th>Took the AI</th><th>Mean score change</th><th>Rated the AI</th></tr>
-     <tr><td>Good</td><td>${fg.n}</td><td>${pct(fg.keep)}</td><td>${pct(fg.useAi)}</td><td>${pct(fg.editMine)}</td><td>${pct(fg.editAi)}</td><td>${pct(fg.took)}</td><td>${fmt(fg.gain)}</td></tr>
-     <tr><td>Bad</td><td>${fb.n}</td><td>${pct(fb.keep)}</td><td>${pct(fb.useAi)}</td><td>${pct(fb.editMine)}</td><td>${pct(fb.editAi)}</td><td>${pct(fb.took)}</td><td>${fmt(fb.gain)}</td></tr>
+     <tr><td>Good</td><td>${fg.n}</td><td>${pct(fg.keep)}</td><td>${pct(fg.useAi)}</td><td>${pct(fg.editMine)}</td><td>${pct(fg.editAi)}</td><td>${pct(fg.took)}</td><td>${fmt(fg.gain)}</td><td>${fmt(fg.rating,0)}</td></tr>
+     <tr><td>Bad</td><td>${fb.n}</td><td>${pct(fb.keep)}</td><td>${pct(fb.useAi)}</td><td>${pct(fb.editMine)}</td><td>${pct(fb.editAi)}</td><td>${pct(fb.took)}</td><td>${fmt(fb.gain)}</td><td>${fmt(fb.rating,0)}</td></tr>
    </table></div>
    <p class="small muted">Confidence before the AI correlates ${fmt(confCorr,2)} with the first-plan score — the metaknowledge check. Ability correlates ${fmt(abilityGain,2)} with the good-minus-bad change, which is your interaction, unadjusted.</p>
 
@@ -225,6 +225,7 @@ function renderDashboard(raw, live){
    ${list("What they think the study is testing", per.map(p=>p.end&&p.end.guess))}
    ${list("Situations that seemed obvious", per.map(p=>p.pilot&&p.pilot.obvious))}
    ${list("Where the one-label rule bound", per.map(p=>p.pilot&&p.pilot.ruleBind))}
+   ${list("Unclear, by situation", [].concat(...per.map(p=>p.cases.map(c=>c.unclear?`${c.name}: ${c.unclear}`:""))))}
    ${list("Other comments", per.map(p=>p.pilot&&p.pilot.other))}
 
    <h2>Data</h2>
