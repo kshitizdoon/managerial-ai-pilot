@@ -89,7 +89,7 @@ function welcome(){
    <p class="serif">You decide what to handle yourself, what to hand to someone on your team, and what to set aside for now.</p>
    <p class="serif">After your plan is recorded, an AI advisor shows you its plan for the same situation. You then decide what your final plan is.</p>
    <div class="card small">
-     <p><b>About ${CONFIG.minutes} minutes.</b> Please do it in one sitting, without looking anything up.</p>
+     <p>Please do it in one sitting, without looking anything up.</p>
      <p>Your answers are used for a student research project at IIM Ahmedabad. You are not asked who you are while you work through the situations.</p>
      <p>At the end you can leave a name and mobile number to enter the prize draw. That is optional, and if you give it, it is saved with your answers rather than kept apart from them.</p>
      <p style="margin:0">You can stop at any time by closing the page.</p>

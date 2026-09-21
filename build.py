@@ -14,6 +14,13 @@ html = (root / "index.html").read_text()
 css = (root / "css/styles.css").read_text()
 
 js_files = re.findall(r'<script src="(js/[^"]+)"></script>', html)
+
+# every file index.html asks for must actually exist. A script tag pointing
+# at a file that was never committed is what turns the deployed site into a
+# blank page, and it costs nothing to catch it here.
+lost = [f for f in js_files if not (root / f).exists()]      + ([] if (root / "css/styles.css").exists() else ["css/styles.css"])
+if lost:
+    sys.exit("index.html references files that are not here: " + ", ".join(lost))
 js = "\n".join(f"/* ==== {f} ==== */\n" + (root / f).read_text() for f in js_files)
 
 # the bundle has no server: keep responses in the browser

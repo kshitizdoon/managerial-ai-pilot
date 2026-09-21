@@ -43,15 +43,15 @@ Each respondent sees version A or B, decided by a coin flip at the start and hel
 
 ## Case 1 — Launch morning
 
-It is 9:30 AM and you are the launch manager for a new consumer product in Bengaluru. The launch starts at 11:00 AM.
+It is 9:30 AM. You manage a new product launch in Bengaluru, starting at 11:00 AM.
 
 | Issue | What the respondent reads |
 | --- | --- |
-| **Supplier** | Today's shipment will arrive 15% short of the confirmed quantity, and the missing units cannot reach the warehouse before tomorrow. The supplier has to be told what we now expect, and today's dispatch re-planned around the smaller stock. |
-| **Key retailer** | A key retailer wants 400 extra units delivered by noon for a promotion running today. The warehouse can release at most 180 before the launch. The revised number has to be agreed with the retailer this morning. |
-| **Marketing** | Marketing wants ₹2 lakh added to today's advertising and needs a yes or no. The campaign is already live at the agreed spend, and the booking can be changed or cancelled without penalty until 5:00 PM. |
-| **Quality** | Two batches show a mismatch between the warehouse label and the quality record. Whether those units meet specification will not be known until the batch records are pulled. Both batches are on the 11:00 AM dispatch list. |
-| **Operations** | The dispatch supervisor wants to skip the final pre-dispatch check to save 40 minutes and has asked for a decision before loading starts. The check is required under the standard dispatch procedure. |
+| **Supplier** | Today's shipment is 15% short and the missing units cannot arrive before tomorrow. Someone has to update the supplier and re-plan today's dispatch around the smaller stock. |
+| **Key retailer** | A key retailer wants 400 extra units by noon for today's promotion. At most 180 can leave the warehouse before the launch; the revised number needs agreeing this morning. |
+| **Marketing** | Marketing wants a yes or no on adding ₹2 lakh to today's advertising. The campaign is already live, and the booking can be changed without penalty until 5:00 PM. |
+| **Quality** | Two batches' warehouse labels do not match their quality records. Whether they meet specification is unknown until the batch records are pulled; both are on the 11:00 AM dispatch list. |
+| **Operations** | The dispatch supervisor wants to skip the final pre-dispatch check to save 40 minutes, and wants a decision before loading starts. Standard procedure requires the check. |
 
 **Your team**
 
@@ -90,15 +90,15 @@ Component scores: own 45, delegate 100, wait 0, hold 30.
 
 ## Case 2 — Strong employee
 
-It is 8:50 AM and you manage a 10-person analytics team. A major client presentation is tomorrow.
+It is 8:50 AM. You manage a 10-person analytics team; a major client presentation is tomorrow.
 
 | Issue | What the respondent reads |
 | --- | --- |
-| **Client** | Two recent deliverables went out with avoidable errors. The client has asked in writing what went wrong, has copied the partner on the account, and wants a reply before 11:00 AM. |
-| **Ananya** | Ananya, one of your strongest performers, has missed two deadlines this month. Sara has asked whether to move part of her work to someone else before tomorrow. Nobody has yet looked at what is on her plate. |
-| **Finance** | The project is 6% over budget and finance needs a written explanation by 4:00 PM. If it misses the cut-off, this month's invoice to the client is held back until the next cycle. |
-| **Data discrepancy** | One number in tomorrow's presentation does not match the source file. Someone has to work out whether the slide or the source is wrong and correct it before the deck is locked tonight. |
-| **Partner request** | A partner has asked for a two-page note on a new market by 5:00 PM today. It feeds a proposal that goes out at the end of next month. |
+| **Client** | Two recent deliverables had avoidable errors. The client has asked in writing what went wrong, copied the partner, and wants a reply before 11:00 AM. |
+| **Ananya** | Ananya, a strong performer, has missed two deadlines this month. Sara asks whether to move some of her work before tomorrow; nobody has looked at her workload. |
+| **Finance** | The project is 6% over budget. Finance needs a written explanation by 4:00 PM, or this month's client invoice slips to the next cycle. |
+| **Data discrepancy** | One number in tomorrow's presentation does not match its source file. Someone must find which is wrong and fix it before the deck locks tonight. |
+| **Partner request** | A partner wants a two-page market note by 5:00 PM, for a proposal going out at the end of next month. |
 
 **Your team**
 
@@ -137,15 +137,15 @@ Component scores: own 100, delegate 100, wait 100, hold 100.
 
 ## Case 3 — Monday project team
 
-It is 9:00 AM on Monday. You lead a 12-person consulting project team, formed after last year's engagement for this client ended.
+It is 9:00 AM on Monday. You lead a 12-person consulting team, formed after last year's engagement for this client ended.
 
 | Issue | What the respondent reads |
 | --- | --- |
-| **Client analysis** | A client wants a revised cost analysis by 1:00 PM today. It has to use the assumptions agreed with the client during last year's engagement, which were never written down. You ran that engagement. |
-| **Live dashboard** | A number on a client-facing dashboard looks wrong. Someone has to work out whether the error is in the source data or in the dashboard calculation, and correct it today. |
-| **New hires** | Two people join next week. Their joining documents and IT access have to be raised by 6:00 PM today, or their first day moves back by a week. |
-| **Team event** | Friday's team event needs an agenda circulated to the team before Thursday. The venue and the speakers are already confirmed and paid for. |
-| **Software** | A ₹3 lakh annual software subscription renews in two weeks and finance wants a renew-or-cancel decision from you. How many people still use it is not recorded anywhere; pulling the usage data takes a day. |
+| **Client analysis** | The client wants a revised cost analysis by 1:00 PM, built on assumptions agreed in last year's engagement and never written down. You ran that engagement. |
+| **Live dashboard** | A number on a client-facing dashboard looks wrong. Someone must trace whether the data or the calculation is at fault and fix it today. |
+| **New hires** | Two people join next week. Their documents and IT access must be raised by 6:00 PM today, or their start slips a week. |
+| **Team event** | Friday's team event needs an agenda circulated before Thursday. The venue and speakers are confirmed and paid for. |
+| **Software** | A ₹3 lakh annual software subscription renews in two weeks; finance wants your renew-or-cancel call. Usage is not recorded, and pulling it takes a day. |
 
 **Your team**
 
@@ -184,17 +184,17 @@ Component scores: own 55, delegate 85, wait 100, hold 35.
 
 ## Case 4 — Friday support team
 
-It is 3:00 PM on Friday and you lead a 20-person customer support team.
+It is 3:00 PM on Friday. You lead a 20-person support team.
 
 Card order constraint: complaint before warning.
 
 | Issue | What the respondent reads |
 | --- | --- |
-| **Customer complaint** | One of your two largest clients says an agent in Meher's pod was rude on yesterday's call. The call was recorded and nobody has listened to it yet. The client expects a reply from you today. |
-| **Formal warning** | Meher has asked you to approve a written warning for that agent today, on the strength of the client's account alone. A written warning stays on the employee's record and cannot be withdrawn. |
-| **Overtime** | This month's overtime claims must be submitted by 5:00 PM and three entries do not match the shift records. Missing the cut-off delays payment to those agents by one month. |
-| **Client meeting** | A client asks to move Monday's review meeting to Tuesday. Tuesday works for the team, though one project lead cannot attend and would have to send written notes instead. |
-| **Shift schedule** | Three shifts next week have been double-booked and the roster has to be corrected before Monday morning. The agents affected have already been told there is a clash. |
+| **Customer complaint** | A major client says an agent in Meher's pod was rude on yesterday's call. Nobody has heard the recording; the client expects your reply today. |
+| **Formal warning** | Meher asks you to approve a written warning for that agent today, on the client's account alone. It would stay on the employee's record and cannot be withdrawn. |
+| **Overtime** | Overtime claims are due at 5:00 PM and three entries do not match the shift records. Missing the cut-off delays those agents' pay by a month. |
+| **Client meeting** | A client asks to move Monday's review to Tuesday. That suits the team, though one project lead would have to send notes. |
+| **Shift schedule** | Three shifts next week are double-booked; the roster must be fixed before Monday. Affected agents already know. |
 
 **Your team**
 
@@ -216,7 +216,7 @@ Component scores: own 55, delegate 60, wait 45, hold 10.
 
 *Version B — good — accuracy 100.0*
 
-> Take the complaint yourself and listen to the recording before anything else happens; the person who raised it also runs the agent's pod. Approve no warning until you have heard the call, because it cannot be withdrawn. Zoya can clear the claims and Ashok can fix the roster.
+> Take the complaint yourself and listen to the recording before anything else happens; the person asking for the warning also runs the agent's pod. Approve no warning until you have heard the call, because it cannot be withdrawn. Zoya can clear the claims and Ashok can fix the roster.
 
 Plan: Own Customer complaint; Delegate Overtime to Zoya; Delegate Shift schedule to Ashok; Wait Client meeting; Hold Formal warning.
 Component scores: own 100, delegate 100, wait 100, hold 100.
@@ -233,17 +233,17 @@ Component scores: own 100, delegate 100, wait 100, hold 100.
 
 ## Case 5 — Fest week
 
-It is 10:00 AM on Monday. You head the student organising committee for your institute's annual fest, which opens in three weeks.
+It is 10:00 AM on Monday. You head your institute's fest committee; the fest opens in three weeks.
 
 Card order constraint: drop before diagnosis; drop before coordinator.
 
 | Issue | What the respondent reads |
 | --- | --- |
-| **Registrations** | Registrations from one large partner campus are 22% below last year. A rival fest moved to the same weekend, and your coordinator on that campus quit in the same week. ₹1.5 lakh of publicity budget is unspent and the committee wants your decision on where it goes. |
-| **Sponsor fee** | Your largest sponsor asks for a 10% cut in their fee and wants an answer this week. The fee is tied to expected footfall, and registrations do not close for another week. Whatever rate you agree holds for the next two fests. |
-| **Registration data** | A campus-by-campus pull of two years of registration history would show whether the drop tracks the rival fest's dates or the coordinator's exit. It takes two days of work and nobody has started it. |
-| **New coordinator** | A replacement coordinator for that campus starts in two weeks and her induction plan needs sign-off before she begins. The plan itself has already been drafted. |
-| **Travel money** | A volunteer team asks for ₹30,000 to visit two partner campuses next week. The amount sits inside a budget line that is already approved for campus outreach. |
+| **Registrations** | Registrations from one partner campus are 22% below last year. A rival fest moved to your weekend, and your coordinator there quit that week. The committee wants your call on the last ₹1.5 lakh of publicity. |
+| **Sponsor fee** | Your largest sponsor wants a 10% fee cut, answered this week. The fee is tied to expected footfall and registrations close next week. Any rate agreed holds for the next two fests. |
+| **Registration data** | Two years of campus-level registration data would show whether the drop tracks the rival fest or the coordinator's exit. Pulling it takes two days; nobody has started. |
+| **New coordinator** | A replacement coordinator for that campus starts in two weeks. Her induction plan is drafted and needs sign-off before she begins. |
+| **Travel money** | Volunteers ask for ₹30,000 to visit two partner campuses next week, from a budget line already approved for campus outreach. |
 
 **Your team**
 
@@ -282,15 +282,15 @@ Component scores: own 55, delegate 72.5, wait 45, hold 15.
 
 ## Case 6 — Day before travel
 
-It is 9:00 AM on Thursday. You lead a 15-person operations team and you leave tomorrow morning for a three-day site visit.
+It is 9:00 AM on Thursday. You lead a 15-person operations team and leave tomorrow for a three-day site visit.
 
 | Issue | What the respondent reads |
 | --- | --- |
-| **Compliance form** | A compliance form is due on Friday and the authority to sign it sits with the unit head personally, which is you. A late filing is reported to the regulator and carries a penalty. |
-| **Customer escalation** | A mid-size B2B customer has escalated twice this month about response times and wants a call back today. Their contract comes up for renewal next quarter. |
-| **Interview panel** | Tomorrow's interview panel is one member short and HR needs a name before the end of today. The candidates have already been told the panel's timing. |
-| **Supplier offer** | A supplier offers 5% off list price for a two-year commitment and the offer stays open for a month. Next year's volumes are fixed in the annual plan the board approves at the end of this month. |
-| **Monthly report** | The monthly operations report is due in ten days. Every number it needs is already in the reporting pack and nothing else depends on it. |
+| **Compliance form** | A compliance form is due Friday, and the authority to sign it sits with the unit head personally: you. Late filing draws a regulatory penalty. |
+| **Customer escalation** | A mid-size B2B customer has escalated twice this month over response times and wants a call today. Their contract renews next quarter. |
+| **Interview panel** | Tomorrow's interview panel is one member short and HR needs a name today. Candidates already have the timings. |
+| **Supplier offer** | A supplier offers 5% off for a two-year commitment, open for a month. Next year's volumes are set in the annual plan the board approves at month end. |
+| **Monthly report** | The monthly report is due in ten days. Its numbers are all in the reporting pack, and nothing depends on it. |
 
 **Your team**
 

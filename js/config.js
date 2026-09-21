@@ -53,6 +53,5 @@ window.CONFIG = {
 
   /* ---- Copy ------------------------------------------------------------ */
   studyTitle: "Six managerial decisions",
-  minutes: 20,
   debrief: "The AI advisor here was not a live AI tool. We wrote its plans, and some of them were weak on purpose. That is how we study the way people use AI advice."
 };
