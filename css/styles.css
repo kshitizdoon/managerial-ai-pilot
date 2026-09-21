@@ -200,4 +200,7 @@ table.data th{color:var(--muted);font-weight:600;font-size:.76rem}
 /* development-only: a declared constraint is broken ---------------------- */
 .devwarn{background:#7A1B1B;color:#fff;padding:.7rem 1.1rem;font-size:.85rem;line-height:1.45}
 .devwarn b{display:block;margin-bottom:.3rem}
-.devwarn ul{margin:0;padding-left:1.1rem}
+.devwarn ul{margin:.3rem 0 0;padding-left:1.1rem}
+.devwarn p{margin:.3rem 0}
+.devwarn code{background:rgba(255,255,255,.15);padding:.05rem .25rem;border-radius:3px}
+.wrap .devwarn{border-radius:10px;margin-top:1rem}

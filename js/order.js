@@ -16,9 +16,13 @@
    small in practice.
    ============================================================= */
 
-const shuffle = a => { a = [...a];
+/* Named shuffleArray, not shuffle, and declared as a function rather than
+   a const. Two top-level `const shuffle` in two scripts is a SyntaxError
+   that kills the whole file, so a stale copy of another script can never
+   collide with this one. */
+function shuffleArray(a){ a = [...a];
   for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-  return a; };
+  return a; }
 
 function orderHolds(arr, edges){
   return edges.every(([a,b]) => arr.indexOf(a) > -1 && arr.indexOf(b) > -1
@@ -41,9 +45,9 @@ function topoOrder(keys, edges){
 }
 
 function constrainedShuffle(keys, edges, tries){
-  if(!edges || !edges.length) return shuffle(keys);
+  if(!edges || !edges.length) return shuffleArray(keys);
   for(let t = 0; t < (tries || 500); t++){
-    const a = shuffle(keys);
+    const a = shuffleArray(keys);
     if(orderHolds(a, edges)) return a;
   }
   return topoOrder(keys, edges);

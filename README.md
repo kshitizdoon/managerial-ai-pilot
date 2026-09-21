@@ -76,6 +76,59 @@ netlify deploy --prod
 
 Same result as Option B without GitHub, but you redeploy by hand.
 
+## If the deployed page is blank
+
+A blank page means one script did not load, so every script after it never
+ran. The page now catches this itself and prints which file is missing
+instead of showing nothing, but the cause is almost always the same:
+
+There are two versions of this mistake, and the console tells you which.
+
+**A new file was not pushed.** `git commit -am "..."` stages only files git
+already tracks. Any file added since the last commit is skipped silently.
+The console shows `404` on the file, then `ReferenceError: <something> is
+not defined`.
+
+**An edited file was not pushed, so an old copy is still live.** The
+console shows a `SyntaxError` on a file that loads fine, most often
+`redeclaration of const ...`, followed by a `ReferenceError`. A syntax
+error kills that entire script, so every function in it disappears. Mixing
+a new file with an old one is the usual cause.
+
+Both have the same fix: push everything, not only what you edited.
+
+```bash
+git status --short          # ?? is untracked, M is edited but uncommitted
+git add -A && git commit -m "..." && git push
+```
+
+To be certain the server has what you have, compare checksums:
+
+```bash
+md5sum index.html css/styles.css js/*.js
+```
+
+Then fetch the same file from the live site and check it matches:
+
+```bash
+curl -s https://yoursite.netlify.app/js/survey.js | md5sum
+```
+
+Confirm from the browser: open `https://yoursite.netlify.app/js/order.js`.
+If that 404s, the file is not deployed. Do the same for every file listed
+in the `<script>` tags at the bottom of `index.html`.
+
+Two other things worth checking, in order:
+
+1. Netlify → **Deploys** → the latest deploy. If it says Failed, the site
+   is still serving the previous build.
+2. The browser console. The preflight names missing files; anything else
+   shows up there as a red error with a file and line number.
+
+Locally, `python3 build.py` now refuses to run if `index.html` points at a
+file that is not in the folder, which catches the same mistake before you
+push.
+
 ## Check before you send the link out
 
 - Open the site, press **Start**, and finish one case. Open the browser
@@ -159,7 +212,7 @@ Six rules keep the six cases consistent. They are in the header of
    clients, no outsiders, no track records.
 5. **No label words on cards.** Never "urgent", "can wait", "delegate",
    "check first", "handle yourself".
-6. **Equal weight.** Every card runs 28 to 45 words. One clearly
+6. **Equal weight.** Every card runs 18 to 40 words. One clearly
    low-stakes issue per case is deliberate: without it the allocation rule
    has no slack and the key gets noisy.
 

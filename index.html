@@ -46,10 +46,53 @@ function dashKeyFromHash(){
   const m = location.hash.match(/^#researcher=?(.*)$/);
   return m ? decodeURIComponent(m[1] || "") : null;
 }
+
+/* Preflight. One script that fails to load takes the whole page down with
+   it, and the page then renders nothing at all, which tells you nothing.
+   Each entry names a file and something that file defines. */
+/* Each test names something that file defines TODAY. A file that is absent
+   and a file that is an older copy both fail the same test, which is what
+   you want: a stale script is the harder of the two to spot. */
+const MODULES = [
+  ["js/config.js",    () => typeof CONFIG === "object" && "contactAt" in CONFIG],
+  ["js/cases.js",     () => typeof CASES !== "undefined" && typeof CASE_AFTER !== "undefined"],
+  ["js/key.js",       () => typeof KEY !== "undefined"],
+  ["js/order.js",     () => typeof constrainedShuffle === "function"],
+  ["js/scoring.js",   () => typeof scorePlan === "function"],
+  ["js/stats.js",     () => typeof mean === "function"],
+  ["js/storage.js",   () => typeof saveLocal === "function"],
+  ["js/survey.js",    () => typeof startSurvey === "function" && typeof cardOrderFor === "function"],
+  ["js/dashboard.js", () => typeof showDashboard === "function" && typeof samePlan === "function"]
+];
+function missingModules(){
+  return MODULES.filter(m => { try{ return !m[1](); }catch(e){ return true; } }).map(m => m[0]);
+}
+function fatal(err, gone){
+  const a = document.getElementById("app");
+  if(!a){ return; }
+  a.className = "wrap narrow";
+  a.innerHTML =
+    '<div class="devwarn"><b>The page could not start.</b>' +
+    (gone && gone.length
+      ? '<p>These files are missing, or are older copies than this page expects:</p><ul>' +
+        gone.map(f => '<li>' + f + '</li>').join("") +
+        '<li style="list-style:none;margin-top:.4rem">Push the whole folder, not just the files you edited. ' +
+        '<code>git add -A</code> then commit and push, and check the browser console for a red SyntaxError, ' +
+        'which means one script is a stale version of itself.</li></ul>'
+      : '<p>' + String(err && err.message ? err.message : err) + '</p>') +
+    '</div>';
+  if(err) console.error(err);
+}
 function boot(){
-  checkKey();
-  const k = dashKeyFromHash();
-  if(k !== null) showDashboard(k); else startSurvey();
+  const gone = missingModules();
+  if(gone.length) return fatal(null, gone);
+  try{
+    checkKey();
+    const k = dashKeyFromHash();
+    if(k !== null) showDashboard(k); else startSurvey();
+  }catch(err){
+    fatal(err, []);
+  }
 }
 window.addEventListener("hashchange", boot);
 boot();
