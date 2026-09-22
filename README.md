@@ -321,3 +321,11 @@ Two things to decide from the pilot:
   is not scored as a catastrophe, or extend the key in `key.js` to list all
   four people for every issue. The second is better and is the reason the
   key is in its own file.
+
+## Incremental response saving
+
+Responses are checkpointed to the Netlify Function/Blobs store after demographics,
+after each completed case, and again at Finish. A single Blob key (the participant
+PID) is updated, so checkpoints do not create duplicate respondents. The dashboard
+shows incomplete checkpoints separately and excludes them from pilot statistics.
+Browser localStorage remains a backup. Netlify Forms is not used as a fallback.

@@ -1,10 +1,7 @@
 /* =============================================================
    responses.mjs — POST stores one response, GET returns them all.
-   Storage is Netlify Blobs: nothing to provision, nothing to pay for
-   at this size.
-
-   POST /api/responses          body: the response JSON
-   GET  /api/responses?key=...  key must match DASHBOARD_KEY if it is set
+   Incremental checkpoints use one Blob per PID. saveSeq prevents an older
+   network request from overwriting a newer checkpoint for the same person.
    ============================================================= */
 
 import { getStore } from "@netlify/blobs";
@@ -23,9 +20,19 @@ export default async (request) => {
     const id = String(body.pid).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
     if (!id) return json({ error: "bad pid" }, 400);
 
+    const incomingSeq = Number(body.saveSeq || 0);
+    const existing = await store.get(id, { type: "json" }).catch(() => null);
+    const existingSeq = Number(existing?.saveSeq || 0);
+
+    /* A delayed checkpoint must never replace a later checkpoint. */
+    if (existing && incomingSeq < existingSeq) {
+      return json({ ok: true, id, ignoredOlderCheckpoint: true, saveSeq: existingSeq });
+    }
+
     body.receivedAt = new Date().toISOString();
+    body.status = body.done ? "complete" : (body.status || "in_progress");
     await store.setJSON(id, body);
-    return json({ ok: true, id });
+    return json({ ok: true, id, saveSeq: incomingSeq, status: body.status });
   }
 
   if (request.method === "GET") {

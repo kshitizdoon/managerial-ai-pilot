@@ -25,34 +25,49 @@ async function sendToFunction(resp){
   const r = await fetch(CONFIG.functionPath, {
     method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(resp)
   });
-  if(!r.ok) throw new Error("function " + r.status);
+  if(!r.ok){
+    const detail = await r.text().catch(() => "");
+    throw new Error("function " + r.status + (detail ? ": " + detail : ""));
+  }
   return "function";
 }
 
-async function sendToForm(resp){
-  const body = new URLSearchParams({
-    "form-name": CONFIG.formName,
-    "pid": resp.pid,
-    "version": resp.version,
-    "defer_mode": resp.deferMode || CONFIG.deferMode,
-    "payload": JSON.stringify(resp)
-  }).toString();
-  const r = await fetch("/", { method:"POST",
-    headers:{"Content-Type":"application/x-www-form-urlencoded"}, body });
-  if(!r.ok) throw new Error("form " + r.status);
-  return "form";
+function completedCaseCount(resp){
+  return Object.values((resp && resp.cases) || {}).filter(r => r && r.final).length;
 }
 
-/* returns the channel that worked, or null */
-async function submitResponse(resp){
+/* Save a full checkpoint to the single authoritative server store.
+   Each checkpoint replaces the same PID record, so it never creates
+   duplicate respondents. saveSeq protects against an older, slower request
+   arriving after a newer one. localStorage remains a browser-side backup. */
+async function checkpointResponse(resp, reason){
+  if(!resp || !resp.pid) return null;
+  resp.saveSeq = (resp.saveSeq || 0) + 1;
+  resp.clientSavedAt = new Date().toISOString();
+  resp.saveReason = reason || "checkpoint";
+  resp.casesCompleted = completedCaseCount(resp);
+  resp.status = resp.done ? "complete" : "in_progress";
   saveLocal(resp);
-  const tries = [];
-  if(CONFIG.storage === "auto" || CONFIG.storage === "function") tries.push(sendToFunction);
-  if(CONFIG.storage === "auto" || CONFIG.storage === "form") tries.push(sendToForm);
-  for(const t of tries){
-    try{ const how = await t(resp); return how; }catch(e){ /* try the next one */ }
+  try{
+    const how = await sendToFunction(resp);
+    resp.lastServerSaveOK = true;
+    resp.lastServerSaveError = null;
+    resp.savedVia = how;
+    saveLocal(resp);
+    console.info("Checkpoint saved", {pid:resp.pid, reason:resp.saveReason, casesCompleted:resp.casesCompleted, saveSeq:resp.saveSeq});
+    return how;
+  }catch(e){
+    resp.lastServerSaveOK = false;
+    resp.lastServerSaveError = String(e && e.message ? e.message : e);
+    saveLocal(resp);
+    console.error("Checkpoint save failed", {pid:resp.pid, reason:resp.saveReason, error:e});
+    return null;
   }
-  return null;
+}
+
+/* Final submission uses the same server path as checkpoints. */
+async function submitResponse(resp){
+  return checkpointResponse(resp, "finish");
 }
 
 /* results view: read everything back from the function */

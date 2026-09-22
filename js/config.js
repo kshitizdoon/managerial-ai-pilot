@@ -39,11 +39,11 @@ window.CONFIG = {
   showPilotQuestions: true,   // the "help us fix the survey" block
 
   /* ---- Where responses go ---------------------------------------------
-     "auto" tries the Netlify function, then a Netlify form, and always
-     keeps a copy in the browser. See README.                              */
-  storage: "auto",
+     Netlify Function + Blobs is the authoritative server store. The survey
+     checkpoints after demographics, after every completed case, and at
+     Finish. localStorage remains an additional browser-side backup.        */
+  storage: "function",
   functionPath: "/api/responses",
-  formName: "pilot",
 
   /* Anyone with this in the link can open the results view:
      yoursite.netlify.app/#researcher=KEY
