@@ -77,6 +77,14 @@ function personRows(raw){
 function renderDashboard(raw, live){
   const per = personRows(raw);
   const N = per.length;
+  const incomplete = raw.filter(r => r && r.pid && !r.done);
+  const incompleteRows = incomplete.length ? `
+   <h2>In-progress responses</h2>
+   <p class="small muted">These are server checkpoints, not completed responses, and are excluded from all statistics below.</p>
+   <div class="scroll"><table class="data">
+     <tr><th>PID</th><th>Cases completed</th><th>Last checkpoint</th><th>Reason</th></tr>
+     ${incomplete.map(r => `<tr><td>${esc(r.pid)}</td><td>${r.casesCompleted ?? Object.values(r.cases||{}).filter(c=>c&&c.final).length}/${CASES.length}</td><td>${esc(r.receivedAt || r.clientSavedAt || "—")}</td><td>${esc(r.saveReason || "—")}</td></tr>`).join("")}
+   </table></div>` : "";
   const importUI = `
    <h3>Add responses</h3>
    <div class="card">
@@ -90,6 +98,7 @@ function renderDashboard(raw, live){
   if(!N){
     paint(`<h1>Pilot results</h1>
       <p>No completed responses yet${live && !live.ok ? ` — and no live database on this host (${esc(live.why)}). See the README for the two ways to collect responses.` : "."}</p>
+      ${incompleteRows}
       ${importUI}
       <p class="small muted"><a href="#" id="back">Back to the survey</a></p>`, true);
     return wireDash(per);
@@ -169,7 +178,8 @@ function renderDashboard(raw, live){
 
   paint(`
    <h1>Pilot results</h1>
-   <p class="muted">${N} completed response${N>1?"s":""}${live && !live.ok ? " (imported; no live database on this host)" : ""}. Modes: ${esc(tally(per.map(p=>p.mode)))}.</p>
+   <p class="muted">${N} completed response${N>1?"s":""}; ${incomplete.length} in progress${live && !live.ok ? " (imported; no live database on this host)" : ""}. Modes among completed: ${esc(tally(per.map(p=>p.mode)))}.</p>
+   ${incompleteRows}
 
    <div class="kpi">
      <div><b>${N}</b><span>completed</span></div>

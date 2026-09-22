@@ -133,7 +133,9 @@ function background(){
       at: 0, cases: {}, msBg: since(), done: false,
       contact: window.__contact || null
     };
-    saveLocal(ST); howItWorks();
+    saveLocal(ST);
+    checkpointResponse(ST, "background_complete");
+    howItWorks();
   };
 }
 
@@ -188,6 +190,13 @@ function route(){
   if(!rec.first)  return pageBoard(c, rec, "first");
   if(!rec.menu)   return pageAdvisor(c, rec);
   if(rec.menu === "edit_mine" && !rec.final) return pageBoard(c, rec, "final");
+  /* A completed final plan is the durable unit of progress. Save it to the
+     server before advancing; the request runs in parallel with the next page. */
+  if(rec.final && !rec.serverCheckpointed){
+    rec.serverCheckpointed = true;
+    saveLocal(ST);
+    checkpointResponse(ST, "case_" + c.id + "_complete");
+  }
   ST.at++; saveLocal(ST); route();
 }
 
