@@ -3,7 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "description": "Managerial in-basket pilot with AI advice",
+  "scripts": {
+    "test": "node --test \"tests/*.test.mjs\"",
+    "test:unit": "node --test tests/scoring.test.mjs tests/order.test.mjs tests/storage.test.mjs tests/function.test.mjs tests/dashboard.test.mjs tests/docs-build.test.mjs",
+    "test:e2e": "node --test tests/e2e.test.mjs"
+  },
   "dependencies": {
     "@netlify/blobs": "^11.1.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.55.0"
   }
 }
