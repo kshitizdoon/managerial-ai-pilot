@@ -39,17 +39,17 @@ window.CONFIG = {
   showPilotQuestions: true,   // the "help us fix the survey" block
 
   /* ---- Where responses go ---------------------------------------------
-     Netlify Function + Blobs is the authoritative server store. The survey
-     checkpoints after demographics, after every completed case, and at
-     Finish. localStorage remains an additional browser-side backup.        */
+     Netlify Function + Blobs is the only server store. The survey saves
+     after About you, after every first plan, after every final plan, and
+     at Finish, and retries failed saves. localStorage is a browser backup.
+     "local" (set by build.py for the single-file bundle) skips the server. */
   storage: "function",
   functionPath: "/api/responses",
 
-  /* Anyone with this in the link can open the results view:
-     yoursite.netlify.app/#researcher=KEY
-     Set the same value as DASHBOARD_KEY in Netlify so the function will
-     hand over the data. Change it before you field the study.             */
-  dashboardKey: "change-me",
+  /* The results view is at  yoursite.netlify.app/#researcher=KEY
+     KEY is the DASHBOARD_KEY environment variable in Netlify. Keep it
+     there only. Do not write it in this file: every visitor can read it,
+     and the records hold names and mobile numbers.                       */
 
   /* ---- Copy ------------------------------------------------------------ */
   studyTitle: "Six managerial decisions",

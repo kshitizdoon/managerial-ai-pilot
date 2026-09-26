@@ -9,8 +9,5 @@
 [functions]
   node_bundler = "esbuild"
 
-# /api/responses is also declared inside the function itself.
-[[redirects]]
-  from = "/api/responses"
-  to = "/.netlify/functions/responses"
-  status = 200
+# /api/responses is set by `export const config` inside the function.
+# No redirect: a custom path turns off the default /.netlify/functions URL.

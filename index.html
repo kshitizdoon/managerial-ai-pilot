@@ -19,18 +19,6 @@
 
 <div class="wrap narrow" id="app"></div>
 
-<!-- Netlify form. Never shown. It exists so Netlify registers the form at
-     deploy time; storage.js posts to it when the function is not there.
-     Do not remove the fields; Netlify only accepts names it saw here. -->
-<form name="pilot" data-netlify="true" netlify-honeypot="bot-field" hidden>
-  <input type="hidden" name="form-name" value="pilot">
-  <input type="text" name="bot-field">
-  <input type="text" name="pid">
-  <input type="text" name="version">
-  <input type="text" name="defer_mode">
-  <textarea name="payload"></textarea>
-</form>
-
 <script src="js/config.js"></script>
 <script src="js/cases.js"></script>
 <script src="js/key.js"></script>
@@ -60,8 +48,8 @@ const MODULES = [
   ["js/order.js",     () => typeof constrainedShuffle === "function"],
   ["js/scoring.js",   () => typeof scorePlan === "function"],
   ["js/stats.js",     () => typeof mean === "function"],
-  ["js/storage.js",   () => typeof saveLocal === "function"],
-  ["js/survey.js",    () => typeof startSurvey === "function" && typeof cardOrderFor === "function"],
+  ["js/storage.js",   () => typeof mergeRecords === "function" && typeof archivedRows === "function"],
+  ["js/survey.js",    () => typeof startSurvey === "function" && typeof startFresh === "function"],
   ["js/dashboard.js", () => typeof showDashboard === "function" && typeof samePlan === "function"]
 ];
 function missingModules(){

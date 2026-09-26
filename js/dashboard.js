@@ -6,11 +6,13 @@ async function showDashboard(key){
   setStep("Results", 100);
   paint(`<h1>Pilot results</h1><p class="muted">Loading…</p>`, true);
   const live = await fetchResponses(key);
-  const rows = [...live.rows];
-  const ids = new Set(rows.map(r => r.pid));
-  importedRows().forEach(r => { if(!ids.has(r.pid)){ rows.push(r); ids.add(r.pid); } });
+  /* One record per PID. A finished copy beats an unfinished one, then the
+     newer checkpoint wins. So a participant's emailed backup replaces the
+     unfinished server record it completes. The device archive holds
+     earlier sessions on this browser; this browser's own record counts
+     only if finished, so a researcher's test run does not show up. */
   const mine = loadLocal();
-  if(mine && mine.done && !ids.has(mine.pid)) rows.push(mine);
+  const rows = mergeRecords(live.rows, importedRows(), archivedRows(), mine && mine.done ? [mine] : []);
   renderDashboard(rows, live);
 }
 
@@ -79,11 +81,11 @@ function renderDashboard(raw, live){
   const N = per.length;
   const incomplete = raw.filter(r => r && r.pid && !r.done);
   const incompleteRows = incomplete.length ? `
-   <h2>In-progress responses</h2>
-   <p class="small muted">These are server checkpoints, not completed responses, and are excluded from all statistics below.</p>
+   <h2>Unfinished responses</h2>
+   <p class="small muted">People who are still going or who dropped out. These are saved checkpoints, not completed responses, and are left out of all statistics below.</p>
    <div class="scroll"><table class="data">
-     <tr><th>PID</th><th>Cases completed</th><th>Last checkpoint</th><th>Reason</th></tr>
-     ${incomplete.map(r => `<tr><td>${esc(r.pid)}</td><td>${r.casesCompleted ?? Object.values(r.cases||{}).filter(c=>c&&c.final).length}/${CASES.length}</td><td>${esc(r.receivedAt || r.clientSavedAt || "—")}</td><td>${esc(r.saveReason || "—")}</td></tr>`).join("")}
+     <tr><th>PID</th><th>Cases completed</th><th>First plans saved</th><th>Last checkpoint</th><th>Reason</th></tr>
+     ${incomplete.map(r => `<tr><td>${esc(r.pid)}</td><td>${completedCaseCount(r)}/${CASES.length}</td><td>${firstPlanCount(r)}/${CASES.length}</td><td>${esc(r.receivedAt || r.clientSavedAt || "—")}</td><td>${esc(r.saveReason || "—")}</td></tr>`).join("")}
    </table></div>` : "";
   const importUI = `
    <h3>Add responses</h3>
@@ -97,7 +99,7 @@ function renderDashboard(raw, live){
 
   if(!N){
     paint(`<h1>Pilot results</h1>
-      <p>No completed responses yet${live && !live.ok ? ` — and no live database on this host (${esc(live.why)}). See the README for the two ways to collect responses.` : "."}</p>
+      <p>No completed responses yet${live && !live.ok ? ` — and the live data could not be loaded (${esc(live.why)}). Check the key in this link and DASHBOARD_KEY in Netlify.` : "."}</p>
       ${incompleteRows}
       ${importUI}
       <p class="small muted"><a href="#" id="back">Back to the survey</a></p>`, true);
@@ -178,7 +180,7 @@ function renderDashboard(raw, live){
 
   paint(`
    <h1>Pilot results</h1>
-   <p class="muted">${N} completed response${N>1?"s":""}; ${incomplete.length} in progress${live && !live.ok ? " (imported; no live database on this host)" : ""}. Modes among completed: ${esc(tally(per.map(p=>p.mode)))}.</p>
+   <p class="muted">${N} completed response${N>1?"s":""}; ${incomplete.length} unfinished${live && !live.ok ? " (imported; no live database on this host)" : ""}. Modes among completed: ${esc(tally(per.map(p=>p.mode)))}.</p>
    ${incompleteRows}
 
    <div class="kpi">
