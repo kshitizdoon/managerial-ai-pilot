@@ -193,15 +193,23 @@ function background(){
     const v = [1,2,3,4,5].map(i => document.getElementById("q"+i).value);
     if(v.some(x => !x)){ document.getElementById("e").textContent = "Please answer all five."; return; }
     const url = new URLSearchParams(location.search);
+    const order = caseOrder();
     ST = {
       pid: uid(),
       version: Math.random() < 0.5 ? "A" : "B",
       deferMode: url.get("defer") || CONFIG.deferMode,
       started: new Date().toISOString(),
       bg: {programme:v[0], experience:v[1], managed:v[2], aiUse:v[3], undergrad:v[4]},
-      order: caseOrder(),
+      /* caseOrder holds case ids and is what the survey follows. order
+         (positions in CASES) is kept for readers of older records. */
+      caseOrder: order.map(i => CASES[i].id),
+      order,
       at: 0, cases: {}, msBg: since(), done: false,
-      contact: window.__contact || null
+      contact: window.__contact || null,
+      /* set once here, never changed: which cases, key and scoring this
+         response was collected under */
+      schemaVersion: RECORD_SCHEMA,
+      instrument: instrumentMeta()
     };
     saveLocal(ST);
     checkpointResponse(ST, "background_complete");
@@ -248,10 +256,19 @@ function cardOrderFor(c){
   return CONFIG.randomiseCardOrder ? constrainedShuffle(keys, edges) : topoOrder(keys, edges);
 }
 
+/* This respondent's sequence of cases. New records store case ids, so a
+   later reordering of CASES cannot move a resumed respondent to another
+   case. Records saved before that store only positions in CASES. */
+function caseSequence(rec){
+  return Array.isArray(rec.caseOrder) ? rec.caseOrder.map(caseById)
+                                      : (rec.order || []).map(i => CASES[i]);
+}
+
 /* ------------------------------------------------------------------ route */
 function route(){
-  if(ST.at >= CASES.length) return closing();
-  const c = CASES[ST.order[ST.at]];
+  const seq = caseSequence(ST);
+  if(ST.at >= seq.length) return closing();
+  const c = seq[ST.at];
   const rec = ST.cases[c.id] || (ST.cases[c.id] = {
     pos: ST.at + 1, errA: 0, errC: 0,
     cardOrder: cardOrderFor(c)
@@ -520,6 +537,11 @@ function planRows(c, plan){
 function pageAdvisor(c, rec){
   setStep(`Situation ${ST.at+1} of ${CASES.length}`, 14 + ST.at*13);
   const ai = aiPlan(c, ST.version);
+  /* what the advisor showed, kept with the answer, so the record stands
+     on its own if an AI plan is edited later. Set once. */
+  if(!rec.ai) rec.ai = {version:ST.version, good:aiIsGood(c, ST.version), mode:ST.deferMode,
+    plan:{own:ai.own, del:{...ai.del}, wait:ai.wait, hold:ai.hold, defer:[...ai.defer], holdPick:ai.holdPick},
+    why:ai.why};
   paint(`${header(c)}
    <p>Your first plan is saved and cannot be changed. An AI advisor looked at the same situation.</p>
    ${recapHTML(c, rec)}

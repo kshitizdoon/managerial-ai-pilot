@@ -7,6 +7,8 @@
      since it was read. If it has, the check is redone.
    - saveSeq: an older checkpoint never replaces a newer one, and an
      unfinished copy never replaces a finished one.
+   - instrument: the version stamp of the first stored copy is kept on
+     every later copy of that PID, so it cannot change after the fact.
    - GET needs DASHBOARD_KEY. With no key set, nothing is returned,
      because the records can hold names and mobile numbers.
    ============================================================= */
@@ -46,6 +48,9 @@ export default async (request) => {
         if (!!existing.done === !!body.done && incomingSeq < existingSeq) {
           return json({ ok: true, id, ignored: "older_checkpoint", saveSeq: existingSeq });
         }
+        // the instrument stamp is set by the first stored copy and never replaced
+        if ("instrument" in existing) body.instrument = existing.instrument;
+        else delete body.instrument;
       }
 
       body.receivedAt = new Date().toISOString();

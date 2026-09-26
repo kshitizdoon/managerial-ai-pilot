@@ -12,8 +12,24 @@ async function showDashboard(key){
      earlier sessions on this browser; this browser's own record counts
      only if finished, so a researcher's test run does not show up. */
   const mine = loadLocal();
-  const rows = mergeRecords(live.rows, importedRows(), archivedRows(), mine && mine.done ? [mine] : []);
-  renderDashboard(rows, live);
+  const lists = [["server", live.rows], ["imported", importedRows()], ["device_archive", archivedRows()],
+                 ["this_device", mine && mine.done ? [mine] : []]];
+  const from = new Map();
+  lists.forEach(([name, list]) => list.forEach(r => { if(r && typeof r === "object") from.set(r, name); }));
+  const rows = mergeRecords(...lists.map(l => l[1]));
+  const sources = {};
+  rows.forEach(r => { sources[r.pid] = from.get(r) || "unknown"; });
+  renderDashboard(rows, live, sources);
+}
+
+/* complete     finished, and every case has a first and a final plan
+   anomalous    marked finished, but at least one case is missing either
+   in_progress  not finished yet (a checkpoint)
+   Only complete records enter the statistics. */
+function recordState(r){
+  if(!r || !r.done) return "in_progress";
+  const all = CASES.every(c => { const x = r.cases && r.cases[c.id]; return !!(x && x.first && x.final); });
+  return all ? "complete" : "anomalous";
 }
 
 /* Did the final plan end up at the AI's plan? Compared on the scored
@@ -37,7 +53,7 @@ function samePlan(a, b, mode){
 
 function personRows(raw){
   const out = [];
-  raw.filter(r => r && r.done && r.cases).forEach(r => {
+  raw.filter(r => recordState(r) === "complete").forEach(r => {
     const mode = r.deferMode || "split";
     const cs = [];
     CASES.forEach(c => {
@@ -70,23 +86,37 @@ function personRows(raw){
     if(cs.length !== CASES.length) return;
     cs.sort((a,b) => a.id - b.id);
     out.push({pid:r.pid, version:r.version, mode, bg:r.bg, end:r.end, pilot:r.pilot,
+              instrument: r.instrument || null,
               totalMin: r.totalMin != null ? r.totalMin : (new Date(r.finished) - new Date(r.started))/60000,
               cases: cs, mda: mean(cs.map(x => x.first))});
   });
   return out;
 }
 
-function renderDashboard(raw, live){
+function renderDashboard(raw, live, sources){
   const per = personRows(raw);
   const N = per.length;
   const incomplete = raw.filter(r => r && r.pid && !r.done);
   const incompleteRows = incomplete.length ? `
    <h2>Unfinished responses</h2>
    <p class="small muted">People who are still going or who dropped out. These are saved checkpoints, not completed responses, and are left out of all statistics below.</p>
-   <div class="scroll"><table class="data">
+   <div class="scroll"><table class="data" id="unfinished">
      <tr><th>PID</th><th>Cases completed</th><th>First plans saved</th><th>Last checkpoint</th><th>Reason</th></tr>
      ${incomplete.map(r => `<tr><td>${esc(r.pid)}</td><td>${completedCaseCount(r)}/${CASES.length}</td><td>${firstPlanCount(r)}/${CASES.length}</td><td>${esc(r.receivedAt || r.clientSavedAt || "—")}</td><td>${esc(r.saveReason || "—")}</td></tr>`).join("")}
    </table></div>` : "";
+  const anomalous = raw.filter(r => r && r.pid && recordState(r) === "anomalous");
+  const anomalousRows = anomalous.length ? `
+   <h2>Marked finished, but incomplete</h2>
+   <p class="small muted">These records say they are finished, yet at least one situation has no first or final plan. That should not happen, so check them by hand. They are left out of all statistics below, and they are in the raw JSON download.</p>
+   <div class="scroll"><table class="data" id="anomalous">
+     <tr><th>PID</th><th>Cases completed</th><th>First plans saved</th><th>Status</th><th>Last checkpoint</th><th>Reason</th><th>Source</th></tr>
+     ${anomalous.map(r => `<tr><td>${esc(r.pid)}</td><td>${completedCaseCount(r)}/${CASES.length}</td><td>${firstPlanCount(r)}/${CASES.length}</td><td>${esc(r.status || "done, no status")}</td><td>${esc(r.receivedAt || r.clientSavedAt || "—")}</td><td>${esc(r.saveReason || "—")}</td><td>${esc((sources && sources[r.pid]) || "—")}</td></tr>`).join("")}
+   </table></div>` : "";
+  const versionRows = instrumentTable(raw);
+  const counts = `${N} completed response${N === 1 ? "" : "s"}; ${incomplete.length} unfinished; ${anomalous.length} marked finished but incomplete`;
+  const rawButton = raw.length
+    ? `<p><button class="ghost" id="json">Download raw JSON, every record as saved (${raw.length})</button></p>
+       <p class="small muted">The raw file holds every record, finished or not, exactly as saved, including any names and mobile numbers participants gave.</p>` : "";
   const importUI = `
    <h3>Add responses</h3>
    <div class="card">
@@ -100,10 +130,14 @@ function renderDashboard(raw, live){
   if(!N){
     paint(`<h1>Pilot results</h1>
       <p>No completed responses yet${live && !live.ok ? ` — and the live data could not be loaded (${esc(live.why)}). Check the key in this link and DASHBOARD_KEY in Netlify.` : "."}</p>
+      ${raw.length ? `<p class="muted" id="counts">${counts}.</p>` : ""}
       ${incompleteRows}
+      ${anomalousRows}
+      ${versionRows}
+      ${rawButton}
       ${importUI}
       <p class="small muted"><a href="#" id="back">Back to the survey</a></p>`, true);
-    return wireDash(per);
+    return wireDash(per, raw, sources);
   }
 
   const J = CASES.length;
@@ -180,8 +214,10 @@ function renderDashboard(raw, live){
 
   paint(`
    <h1>Pilot results</h1>
-   <p class="muted">${N} completed response${N>1?"s":""}; ${incomplete.length} unfinished${live && !live.ok ? " (imported; no live database on this host)" : ""}. Modes among completed: ${esc(tally(per.map(p=>p.mode)))}.</p>
+   <p class="muted" id="counts">${counts}${live && !live.ok ? " (imported; no live database on this host)" : ""}. Modes among completed: ${esc(tally(per.map(p=>p.mode)))}.</p>
    ${incompleteRows}
+   ${anomalousRows}
+   ${versionRows}
 
    <div class="kpi">
      <div><b>${N}</b><span>completed</span></div>
@@ -263,24 +299,26 @@ function renderDashboard(raw, live){
    ${list("Other comments", per.map(p=>p.pilot&&p.pilot.other))}
 
    <h2>Data</h2>
-   <p><button class="ghost" id="csv">Download CSV, one row per person and case</button>
-      <button class="ghost" id="json">Download raw JSON</button></p>
+   <p><button class="ghost" id="csv">Download CSV, one row per person and case</button></p>
+   <p class="small muted">The CSV is the analysis file: completed responses only, scored with the key deployed now.</p>
+   ${rawButton}
    ${importUI}
    <p class="small muted" style="margin-top:1.6rem"><a href="#" id="back">Back to the survey</a></p>`, true);
 
-  wireDash(per);
+  wireDash(per, raw, sources);
 }
 
-function wireDash(per){
+function wireDash(per, raw, sources){
   const $ = id => document.getElementById(id);
   if($("csv")) $("csv").onclick = () => downloadFile("pilot-long.csv", toCSV(per), "text/csv");
-  if($("json")) $("json").onclick = () => downloadFile("pilot-raw.json", JSON.stringify(per, null, 1), "application/json");
+  if($("json")) $("json").onclick = () => downloadFile("pilot-raw.json", JSON.stringify(rawExport(raw, sources), null, 1), "application/json");
   if($("addr")) $("addr").onclick = () => {
     const txt = $("paste").value.trim(); const msg = $("addmsg");
     let rows = [];
     try{
       const one = JSON.parse(txt);
-      rows = Array.isArray(one) ? one : [one];
+      /* a raw JSON download from this page goes back in as it came out */
+      rows = Array.isArray(one) ? one : (one && Array.isArray(one.responses)) ? one.responses : [one];
     }catch(e){
       txt.split("\n").forEach(line => { try{ rows.push(JSON.parse(line)); }catch(_){} });
     }
@@ -291,6 +329,62 @@ function wireDash(per){
   };
   if($("clr")) $("clr").onclick = () => { clearImported(); showDashboard(dashKeyFromHash()); };
   if($("back")) $("back").onclick = e => { e.preventDefault(); location.hash = ""; startSurvey(); };
+}
+
+/* Which instrument version each record was collected under. The page
+   scores every record with the cases and key deployed now; this table
+   says so, and names the records for which that is a re-scoring. */
+function instrumentTable(raw){
+  const recs = raw.filter(r => r && r.pid);
+  if(!recs.length) return "";
+  const now = instrumentMeta();
+  const groups = new Map();
+  recs.forEach(r => {
+    const m = r.instrument || null;
+    const k = m ? stableJSON([m.instrumentVersion, m.scoringVersion, m.casesHash, m.keyHash, m.scoringConfig]) : "none";
+    const g = groups.get(k) || {m, complete:0, in_progress:0, anomalous:0};
+    g[recordState(r)]++;
+    groups.set(k, g);
+  });
+  const match = m => { const s = sameInstrument(m);
+    return s === true ? "yes" : s === false ? "no, re-scored with the current key" : "not recorded (saved before versions were stamped)"; };
+  const done = recs.filter(r => recordState(r) === "complete");
+  const other = done.filter(r => sameInstrument(r.instrument) === false).length;
+  const unknown = done.filter(r => sameInstrument(r.instrument) === null).length;
+  return `
+   <h2>Instrument versions</h2>
+   <div class="scroll"><table class="data" id="versions">
+     <tr><th>Version</th><th>Cases</th><th>Key</th><th>Scoring</th><th>Completed</th><th>Unfinished</th><th>Finished but incomplete</th><th>Same as deployed now</th></tr>
+     ${[...groups.values()].map(g => `<tr><td>${esc(g.m ? g.m.instrumentVersion || "unnamed" : "—")}</td>
+       <td>${esc(g.m ? g.m.casesHash : "—")}</td><td>${esc(g.m ? g.m.keyHash : "—")}</td><td>${esc(g.m ? "v" + g.m.scoringVersion : "—")}</td>
+       <td>${g.complete}</td><td>${g.in_progress}</td><td>${g.anomalous}</td><td>${esc(match(g.m))}</td></tr>`).join("")}
+   </table></div>
+   <p class="small muted">Scores on this page use what is deployed now: ${esc(now.instrumentVersion || "unnamed")}, cases ${esc(now.casesHash)}, key ${esc(now.keyHash)}, scoring v${now.scoringVersion}. Saved answers are never changed; a record from another version is re-scored here, not re-answered.</p>
+   ${other ? `<p class="flag">${other} completed response${other > 1 ? "s were" : " was"} collected under a different version of the cases, key or scoring, and ${other > 1 ? "are" : "is"} scored here with the current one.</p>` : ""}
+   ${unknown ? `<p class="flag">${unknown} completed response${unknown > 1 ? "s were" : " was"} saved before instrument versions were recorded, so the version ${unknown > 1 ? "they were" : "it was"} collected under is not on the record. ${unknown > 1 ? "They are" : "It is"} scored here with the current key.</p>` : ""}`;
+}
+
+/* The raw download: every record, finished or not, exactly as saved.
+   The analysis rows are in the CSV instead. */
+function rawExport(raw, sources){
+  const records = raw.filter(r => r && r.pid);
+  const counts = {total: records.length, complete: 0, in_progress: 0, anomalous: 0};
+  const index = records.map(r => {
+    const state = recordState(r);
+    counts[state]++;
+    return {pid: r.pid, state, source: (sources && sources[r.pid]) || "unknown",
+            casesCompleted: completedCaseCount(r), firstPlans: firstPlanCount(r),
+            saveSeq: r.saveSeq != null ? r.saveSeq : null,
+            instrumentVersion: r.instrument ? r.instrument.instrumentVersion : null};
+  });
+  return {
+    format: "inbasket-raw-records", formatVersion: 1,
+    exportedAt: new Date().toISOString(),
+    note: "responses holds one record per PID exactly as saved, including unfinished ones and any contact details. index says which were complete, in progress, or marked finished but incomplete, and where each came from. The dashboard's scores use scoredWith.",
+    scoredWith: instrumentMeta(),
+    counts, index,
+    responses: JSON.parse(JSON.stringify(records))
+  };
 }
 
 function tally(list){
@@ -306,17 +400,23 @@ function toCSV(per){
     "case_id","case_name","position","ai_quality","first_score","final_score","ai_plan_score",
     "own","delegate","wait","hold","defer_set","hold_score","split_matched_key","split_worth_points",
     "unlisted_delegates","change","menu","conf_before","ended_at_ai","minutes","blocked_presses",
-    "mda_all","mda_leave_one_out"];
+    "mda_all","mda_leave_one_out",
+    "instrument_version","scoring_version","recorded_cases_hash","recorded_key_hash",
+    "scored_with_cases_hash","scored_with_key_hash"];
+  const now = instrumentMeta();
   const lines = [head.join(",")];
   const r2 = x => Number.isFinite(x) ? Math.round(x*100)/100 : "";
   per.forEach(p => p.cases.forEach(c => {
     const loo = mean(p.cases.filter(x => x.id !== c.id).map(x => x.first));
+    const I = p.instrument;
     const row = [p.pid, p.version, p.mode, p.bg&&p.bg.programme, p.bg&&p.bg.experience, p.bg&&p.bg.managed,
       p.bg&&p.bg.aiUse, p.bg&&p.bg.undergrad, p.end&&p.end.cat != null ? p.end.cat : "",
       c.id, c.name, c.pos, c.good ? "good" : "bad", r2(c.first), r2(c.final), r2(c.ai),
       r2(c.parts.own), r2(c.parts.del), r2(c.parts.wait), r2(c.parts.hold), r2(c.parts.set), r2(c.holdScore),
       c.splitOK === null ? "" : (c.splitOK ? 1 : 0), r2(c.swing), c.unlisted,
-      r2(c.final - c.first), c.menu, c.conf1, c.endedAtAI ? 1 : 0, r2(c.min), c.errs, r2(p.mda), r2(loo)];
+      r2(c.final - c.first), c.menu, c.conf1, c.endedAtAI ? 1 : 0, r2(c.min), c.errs, r2(p.mda), r2(loo),
+      I ? I.instrumentVersion : "", I ? I.scoringVersion : "", I ? I.casesHash : "", I ? I.keyHash : "",
+      now.casesHash, now.keyHash];
     lines.push(row.map(v => { const s = String(v == null ? "" : v);
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; }).join(","));
   }));

@@ -26,6 +26,7 @@ Plain HTML, CSS and JavaScript. No build step, no framework.
 | `netlify/functions/responses.mjs` | Stores and returns responses. |
 | `make-docs.js` | `node make-docs.js` regenerates `docs/instrument.md` from the cases and the key. |
 | `build.py` | Optional. Bundles everything into `dist/index.html` for a single-file copy. |
+| `tests/` | Regression tests. `npm install`, then `npm test`. |
 
 ## Run it on your laptop
 
@@ -338,6 +339,36 @@ so repeat saves never create duplicate respondents.
   are left out of all statistics.
 - **Browser backup.** `localStorage` holds the current response so a reload
   resumes it.
+- **Marked finished, but incomplete.** A record that says it is finished
+  but lacks a first or final plan for any situation is listed in its own
+  table on the results view and left out of all statistics.
+- **Instrument version.** Every new response carries `instrument`: the
+  `instrumentVersion` name from `js/config.js`, `scoringVersion`,
+  fingerprints of `cases.js` and `key.js`, and the scoring settings. It is
+  set once and the function never lets it change. Rename
+  `instrumentVersion` whenever you edit the cases, key or scoring. The
+  results view scores every record with what is deployed now and lists
+  which versions the records came from. Records saved before this field
+  existed show as "not recorded". New responses also store `caseOrder` as
+  case ids (not positions) and, per case, the AI plan that was shown (`ai`).
+- **Downloads.** The CSV is the analysis file: completed responses only,
+  one row per person and case. The raw JSON is every record, finished or
+  not, exactly as saved, including contact details. It can be pasted back
+  into **Add responses**.
+
+## Tests
+
+```bash
+npm install          # playwright-core, for the browser tests
+npm test             # everything
+npm run test:unit    # no browser needed
+```
+
+The browser tests need Chromium. They use `CHROMIUM_PATH` if set, else a
+browser installed by `npx playwright install chromium`. If `cases.js` or
+`key.js` changes on purpose, `tests/instrument.test.mjs` and
+`tests/scoring.test.mjs` will fail until their pinned values are updated,
+and `docs/instrument.md` must be regenerated.
 
 ## Several people on one device
 

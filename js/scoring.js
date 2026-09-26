@@ -15,6 +15,54 @@
    ============================================================= */
 
 function caseById(id){ return CASES.find(c => c.id === id); }
+
+/* ---- instrument version ---------------------------------------------
+   instrumentMeta() is stamped once on every new response (survey.js) and
+   never changed after that. The fingerprints follow cases.js and key.js
+   by themselves; SCORING_VERSION is the one to bump by hand when the
+   rules in this file change. RECORD_SCHEMA is the shape of a saved
+   response: records without a schemaVersion field are version 1. */
+const SCORING_VERSION = 1;
+const RECORD_SCHEMA = 2;
+
+/* JSON with sorted object keys, so the same content always hashes the same */
+function stableJSON(x){
+  if(Array.isArray(x)) return "[" + x.map(stableJSON).join(",") + "]";
+  if(x && typeof x === "object")
+    return "{" + Object.keys(x).sort().filter(k => x[k] !== undefined)
+      .map(k => JSON.stringify(k) + ":" + stableJSON(x[k])).join(",") + "}";
+  return JSON.stringify(x === undefined ? null : x);
+}
+/* FNV-1a, 32 bits, as 8 hex digits. A change detector, not security. */
+function fingerprint(x){
+  const s = stableJSON(x);
+  let h = 0x811c9dc5;
+  for(let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return ("0000000" + h.toString(16)).slice(-8);
+}
+function instrumentMeta(){
+  const good = {};
+  CASES.forEach(c => { good[c.id] = c.goodVersion; });
+  return {
+    instrumentVersion: CONFIG.instrumentVersion || null,
+    scoringVersion: SCORING_VERSION,
+    casesHash: fingerprint(CASES),
+    keyHash: fingerprint(KEY),
+    scoringConfig: {unlistedDelegateScore: CONFIG.unlistedDelegateScore,
+                    includeHoldInCaseScore: CONFIG.includeHoldInCaseScore},
+    caseIds: CASES.map(c => c.id),
+    goodVersion: good
+  };
+}
+/* Was this record made with the cases, key and scoring deployed now?
+   true, false, or null when the record predates version stamping. */
+function sameInstrument(meta){
+  if(!meta) return null;
+  const now = instrumentMeta();
+  return meta.casesHash === now.casesHash && meta.keyHash === now.keyHash &&
+         meta.scoringVersion === now.scoringVersion &&
+         stableJSON(meta.scoringConfig) === stableJSON(now.scoringConfig);
+}
 function keyFor(id){ return KEY[id]; }
 
 function delegateScore(id, issue, person){
@@ -114,6 +162,9 @@ const aiIsGood = (c, version) => c.goodVersion === version;
 /* sanity check on load: every issue must be in the key */
 function checkKey(){
   const problems = [];
+  /* saved responses find their cases by id, so ids must be unique */
+  const ids = CASES.map(c => c.id);
+  ids.forEach((id, i) => { if(ids.indexOf(id) !== i) problems.push(`case id ${id} is used twice`); });
   CASES.forEach(c => {
     const K = KEY[c.id];
     if(!K){ problems.push(`case ${c.id}: no key`); return; }

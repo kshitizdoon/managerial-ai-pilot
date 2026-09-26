@@ -42,15 +42,15 @@ function dashKeyFromHash(){
    and a file that is an older copy both fail the same test, which is what
    you want: a stale script is the harder of the two to spot. */
 const MODULES = [
-  ["js/config.js",    () => typeof CONFIG === "object" && "contactAt" in CONFIG],
+  ["js/config.js",    () => typeof CONFIG === "object" && "contactAt" in CONFIG && "instrumentVersion" in CONFIG],
   ["js/cases.js",     () => typeof CASES !== "undefined" && typeof CASE_AFTER !== "undefined"],
   ["js/key.js",       () => typeof KEY !== "undefined"],
   ["js/order.js",     () => typeof constrainedShuffle === "function"],
-  ["js/scoring.js",   () => typeof scorePlan === "function"],
+  ["js/scoring.js",   () => typeof scorePlan === "function" && typeof instrumentMeta === "function"],
   ["js/stats.js",     () => typeof mean === "function"],
   ["js/storage.js",   () => typeof mergeRecords === "function" && typeof archivedRows === "function"],
-  ["js/survey.js",    () => typeof startSurvey === "function" && typeof startFresh === "function"],
-  ["js/dashboard.js", () => typeof showDashboard === "function" && typeof samePlan === "function"]
+  ["js/survey.js",    () => typeof startSurvey === "function" && typeof caseSequence === "function"],
+  ["js/dashboard.js", () => typeof showDashboard === "function" && typeof rawExport === "function" && typeof recordState === "function"]
 ];
 function missingModules(){
   return MODULES.filter(m => { try{ return !m[1](); }catch(e){ return true; } }).map(m => m[0]);

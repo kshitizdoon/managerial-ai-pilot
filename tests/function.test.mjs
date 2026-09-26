@@ -99,3 +99,30 @@ test("GET needs DASHBOARD_KEY and returns every record", async () => {
     if (saved === undefined) delete process.env.DASHBOARD_KEY; else process.env.DASHBOARD_KEY = saved;
   }
 });
+
+test("the instrument stamp of the first stored copy is never replaced", async () => {
+  const fn = await loadFunction();
+  const stamp = { instrumentVersion: "v1", keyHash: "aaaa0000", casesHash: "bbbb0000", scoringVersion: 1 };
+  await fn.post({ pid: "s1", saveSeq: 1, done: false, instrument: stamp });
+  await fn.post({ pid: "s1", saveSeq: 2, done: false, instrument: { ...stamp, keyHash: "ffffffff" } });
+  await fn.post({ pid: "s1", saveSeq: 3, done: true });
+  const r = fn.stored("s1");
+  assert.equal(r.saveSeq, 3);
+  assert.equal(r.status, "complete");
+  assert.deepEqual(r.instrument, stamp);
+});
+
+test("a record first stored without a stamp (older survey code) never gains one", async () => {
+  const fn = await loadFunction();
+  await fn.post({ pid: "old1", saveSeq: 4, done: false, answers: 1 });
+  await fn.post({ pid: "old1", saveSeq: 5, done: true, answers: 2, instrument: { instrumentVersion: "new" } });
+  const r = fn.stored("old1");
+  assert.equal(r.answers, 2);
+  assert.equal("instrument" in r, false);
+});
+
+test("a brand new PID keeps the stamp it arrives with", async () => {
+  const fn = await loadFunction();
+  await fn.post({ pid: "n1", saveSeq: 1, instrument: { instrumentVersion: "x" } });
+  assert.deepEqual(fn.stored("n1").instrument, { instrumentVersion: "x" });
+});

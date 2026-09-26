@@ -51,6 +51,14 @@ window.CONFIG = {
      there only. Do not write it in this file: every visitor can read it,
      and the records hold names and mobile numbers.                       */
 
+  /* ---- Instrument version ---------------------------------------------
+     A name for this version of the cases, key and scoring. It is stamped,
+     with automatic fingerprints of cases.js and key.js, on every new
+     response and never changed afterwards. Give it a new name whenever
+     you edit cases.js, key.js or the scoring, so responses collected
+     under different versions can be told apart.                          */
+  instrumentVersion: "pilot-2026-09",
+
   /* ---- Copy ------------------------------------------------------------ */
   studyTitle: "Six managerial decisions",
   debrief: "The AI advisor here was not a live AI tool. We wrote its plans, and some of them were weak on purpose. That is how we study the way people use AI advice."
