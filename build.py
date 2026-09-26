@@ -3,7 +3,7 @@
 
 Use it when you want to hand someone a single file, or to publish a
 preview. The bundled copy stores responses in the browser only; the
-Netlify function and form are not there. Deploy the folder, not this.
+Netlify function is not there. Deploy the folder, not this.
 
     python3 build.py
 """
@@ -24,13 +24,12 @@ if lost:
 js = "\n".join(f"/* ==== {f} ==== */\n" + (root / f).read_text() for f in js_files)
 
 # the bundle has no server: keep responses in the browser
-js = js.replace('storage: "auto"', 'storage: "local"')
+js = js.replace('storage: "function"', 'storage: "local"')
 
 html = html.replace('<link rel="stylesheet" href="css/styles.css">', f"<style>\n{css}\n</style>")
 for f in js_files:
     html = html.replace(f'<script src="{f}"></script>', "")
 html = html.replace("<!-- BUNDLE -->", "")
-html = re.sub(r'<form name="pilot".*?</form>', "", html, flags=re.S)
 html = html.replace("<script>\n/* router", f"<script>\n{js}\n</script>\n<script>\n/* router")
 
 out = root / "dist"

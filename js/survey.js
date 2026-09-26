@@ -36,8 +36,23 @@ const need = k => (labelSet().find(l => l[0] === k) || [,,0])[2];
 
 /* ------------------------------------------------------------------ start */
 function startSurvey(){
+  /* ?new=1 in the link forces a fresh response. Useful when several
+     people take the survey on one device. The flag is removed from the
+     address bar at once, so a reload does not wipe a response. */
+  const url = new URLSearchParams(location.search);
+  if(url.has("new")){
+    url.delete("new");
+    const q = url.toString();
+    try{ history.replaceState(null, "", location.pathname + (q ? "?" + q : "") + location.hash); }catch(e){}
+    return startFresh();
+  }
   const saved = loadLocal();
-  if(saved && saved.done){ ST = saved; return thanks(); }
+  if(saved && saved.done){
+    ST = saved;
+    /* a finished response whose last save failed: try again quietly */
+    if(!ST.savedVia) retryFinalSave();
+    return thanks();
+  }
   if(saved && saved.order){
     ST = saved;
     /* a session left half-finished on this browser before "Edit the AI's
@@ -46,9 +61,64 @@ function startSurvey(){
     Object.keys(ST.cases || {}).forEach(k => {
       const r = ST.cases[k]; if(r && r.menu === "edit_ai" && !r.final) r.menu = "edit_mine";
     });
-    return route();
+    return resumePrompt();
   }
   welcome();
+}
+
+/* An unfinished response is on this device. It may be this person after
+   a reload, or someone else on a shared device. Ask, never assume. */
+function resumePrompt(){
+  setStep("Welcome back", 0);
+  const done = completedCaseCount(ST);
+  paint(`
+   <h1>${esc(CONFIG.studyTitle)}</h1>
+   <div class="card">
+     <p style="margin-top:0"><b>An unfinished response is saved on this device.</b></p>
+     <p class="small muted" style="margin:0">It has ${done} of ${CASES.length} situations completed.</p>
+   </div>
+   <button class="go" id="cont">Continue my response</button>
+   <p class="small muted" style="margin-top:1.4rem">Not yours? If someone else started it on this device,
+     <a href="#" id="fresh">start a new response</a>. Their answers so far are already kept.</p>`);
+  document.getElementById("cont").onclick = () => {
+    if(ST.lastServerSaveOK === false) checkpointResponse(ST, "resume_retry");
+    route();
+  };
+  document.getElementById("fresh").onclick = e => { e.preventDefault(); startFresh(); };
+}
+
+/* Start a clean response on this device. The previous record is sent to
+   the server one more time and kept in the device archive, then cleared. */
+function startFresh(){
+  const old = loadLocal();
+  if(old && old.pid){
+    const needsSave = !old.done || !old.savedVia || old.lastServerSaveOK === false;
+    if(needsSave) checkpointResponse(old, old.done ? "finish_retry_on_new_session" : "left_unfinished_on_device");
+    archiveLocal();
+  }
+  clearLocal();
+  ST = null;
+  window.__contact = null;
+  welcome();
+}
+
+/* retry the final save of a finished response; repaint when it lands */
+let finalRetryRunning = false;
+async function retryFinalSave(){
+  if(!ST || !ST.done || ST.savedVia || finalRetryRunning) return;
+  finalRetryRunning = true;
+  const rec = ST;
+  const how = await submitResponse(rec, "finish_retry");
+  finalRetryRunning = false;
+  if(how){
+    rec.savedVia = how; saveLocalIfCurrent(rec);
+    if(ST === rec) thanks();
+  } else if(ST === rec){
+    const m = document.getElementById("retrymsg");
+    if(m) m.textContent = "Still could not reach the study database. Please use Copy or Download below.";
+    const b = document.getElementById("retry");
+    if(b){ b.disabled = false; b.textContent = "Try again"; }
+  }
 }
 
 /* Name and mobile. Default is the end of the survey: if a respondent gives
@@ -423,7 +493,10 @@ function pageBoard(c, rec, which){
     if(merged) plan.holdPick = pick.v === "none" ? null : pick.v;
     if(first){ rec.first = plan; rec.conf1 = +conf.value; rec.msA = since(); }
     else { rec.final = plan; rec.msC = since(); }
-    saveLocal(ST); route();
+    saveLocal(ST);
+    /* the pre-AI plan feeds the ability score: save it before the advisor shows */
+    if(first) checkpointResponse(ST, "case_" + c.id + "_first_plan");
+    route();
   };
 }
 
@@ -536,16 +609,26 @@ function thanks(){
    <p class="serif">Please do not discuss these situations with anyone who may take the survey later.</p>
    ${ok ? `<p class="small muted">Your answers were saved.</p>` : `
    <div class="card">
-     <p><b>Your answers could not reach the study database from this device.</b></p>
-     <p class="small">Copy the text below and send it to the person who shared this link, or download it as a file. It holds your answers, and any contact details you chose to give.</p>
+     <p><b>Your answers could not reach the study database yet.</b></p>
+     <p class="small" id="retrymsg">${finalRetryRunning ? "Trying again…" : "Check your connection and press Try again."}</p>
+     <p style="margin:.5rem 0 0"><button class="go" id="retry"${finalRetryRunning ? " disabled" : ""}>${finalRetryRunning ? "Trying…" : "Try again"}</button></p>
+     <p class="small" style="margin-top:1rem">If it still fails, copy the text below and send it to the person who shared this link, or download it as a file. It holds your answers, and any contact details you chose to give.</p>
      <textarea id="dump" readonly style="min-height:6rem"></textarea>
      <p style="margin:.5rem 0 0"><button class="ghost" id="copy">Copy</button>
      <button class="ghost" id="dl">Download file</button></p>
-   </div>`}`);
+   </div>`}
+   <p class="small muted" style="margin-top:2rem">Someone else taking the survey on this device?
+     <a href="#" id="fresh">Start a new response</a>.</p>`);
+  document.getElementById("fresh").onclick = e => { e.preventDefault(); startFresh(); };
   if(!ok){
     const t = document.getElementById("dump"); t.value = JSON.stringify(ST);
     document.getElementById("copy").onclick = () => { t.select();
       try{ document.execCommand("copy"); document.getElementById("copy").textContent = "Copied"; }catch(e){} };
     document.getElementById("dl").onclick = () => downloadFile(`response-${ST.pid}.json`, JSON.stringify(ST,null,1), "application/json");
+    document.getElementById("retry").onclick = () => {
+      const b = document.getElementById("retry"); b.disabled = true; b.textContent = "Trying…";
+      document.getElementById("retrymsg").textContent = "Trying again…";
+      retryFinalSave();
+    };
   }
 }

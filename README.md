@@ -13,7 +13,7 @@ Plain HTML, CSS and JavaScript. No build step, no framework.
 
 | File | What it holds |
 | --- | --- |
-| `js/config.js` | The knobs: deferral mode, scoring defaults, randomisation, dashboard key. Start here. |
+| `js/config.js` | The knobs: deferral mode, scoring defaults, randomisation. Start here. |
 | `js/cases.js` | Everything respondents read: situations, issues, delegate rosters, both AI plans. |
 | `js/key.js` | The scoring key. Not shown to anyone. |
 | `js/order.js` | Constrained randomisation: shuffles cases and cards, keeps declared `after` constraints, and validates them. |
@@ -35,32 +35,28 @@ python3 -m http.server 5500
 # open http://localhost:5500
 ```
 
-Responses cannot be saved locally, so the last screen offers the
-participant a block of text to copy. That is the fallback path working as
-designed. The results view is at `http://localhost:5500/#researcher=change-me`.
+There is no function on a local server, so saves fail (after three tries
+each) and the last screen offers a block of text to copy. That is the
+fallback working as designed. The results view at
+`http://localhost:5500/#researcher=anything` shows only imported responses.
 
 ## Put it online
 
-### Option A — drag and drop, two minutes, no live results
+Deploy with GitHub (Option B) or the Netlify CLI (Option C). Do not use a
+drag-and-drop deploy: it has no function, so no response reaches the
+server and every participant ends on the copy-your-answers screen.
 
-1. Zip nothing; just drag the `pilot-site` folder onto <https://app.netlify.com/drop>.
-2. In the Netlify UI open **Forms** and select **Enable form detection**.
-3. Deploy once more (drag the folder again) so Netlify scans the form.
-4. Share the site link.
-
-Responses land under **Forms → pilot** in the Netlify UI. Export the CSV,
-open the `payload` column, and paste the rows into **Add responses** in the
-results view. Clunky, but it needs no account setup beyond Netlify itself.
-
-### Option B — GitHub, live results (recommended)
+### Option B — GitHub, live results
 
 1. Put this folder in a GitHub repository.
 2. Netlify → **Add new site → Import an existing project** → pick the repo.
 3. Leave the build command empty. Publish directory `.`. Netlify reads
    `netlify.toml` and installs the one dependency for the function.
 4. Netlify → **Site configuration → Environment variables** → add
-   `DASHBOARD_KEY` with a value only you know.
-5. Set the same value as `dashboardKey` in `js/config.js`, commit, push.
+   `DASHBOARD_KEY` with a value only you know. Do not put it in any file in
+   this folder: every file is public. Without it the results view returns
+   nothing, on purpose, because records hold names and mobile numbers.
+5. Redeploy once so the function sees the variable.
 
 Responses go straight into Netlify Blobs. The results view reads them live
 at `https://yoursite.netlify.app/#researcher=YOUR_KEY`. Every `git push`
@@ -322,10 +318,45 @@ Two things to decide from the pilot:
   four people for every issue. The second is better and is the reason the
   key is in its own file.
 
-## Incremental response saving
+## How responses are saved
 
-Responses are checkpointed to the Netlify Function/Blobs store after demographics,
-after each completed case, and again at Finish. A single Blob key (the participant
-PID) is updated, so checkpoints do not create duplicate respondents. The dashboard
-shows incomplete checkpoints separately and excludes them from pilot statistics.
-Browser localStorage remains a backup. Netlify Forms is not used as a fallback.
+Every response is saved to the Netlify function (Netlify Blobs) as a full
+copy at these points: after About you, after each first plan (before the AI
+advisor appears), after each final plan, and at Finish. One Blob per PID,
+so repeat saves never create duplicate respondents.
+
+- **Retries.** Each save is tried three times. A later save carries the
+  whole response, so one failed save is repaired by the next one.
+- **Order.** `saveSeq` numbers the saves. The function reads with strong
+  consistency and writes with compare-and-set, so an older copy never
+  replaces a newer one, and an unfinished copy never replaces a finished one.
+- **Failed Finish.** The last screen shows **Try again**. Reopening the link
+  on the same device retries on its own. If it still fails, the participant
+  can copy or download the response. Paste it into **Add responses**; a
+  finished copy replaces the unfinished server record for that PID.
+- **Unfinished responses** show in their own table on the results view and
+  are left out of all statistics.
+- **Browser backup.** `localStorage` holds the current response so a reload
+  resumes it.
+
+## Several people on one device
+
+The survey no longer assumes the device belongs to one person.
+
+- A finished response shows the thank-you page with a **Start a new
+  response** link.
+- An unfinished response asks: continue, or start new.
+- Add `?new=1` to the link (for example `yoursite.netlify.app/?new=1`) to
+  always start clean. The flag is removed from the address bar at once, so a
+  reload does not wipe the new response.
+
+Starting new sends the old response to the server once more, then keeps a
+copy in a device archive (last 20). Opening the results view on that
+device includes the archive, so a response whose save failed can still be
+recovered from the device.
+
+## Moving v1 data across
+
+Responses that v1 saved through the Netlify Form fallback are under
+**Forms → pilot** in Netlify, not in Blobs. Export the CSV, copy the
+`payload` column, and paste it into **Add responses**.
