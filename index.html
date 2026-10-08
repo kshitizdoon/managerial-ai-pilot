@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Six managerial decisions</title>
+<title>Managerial Decision Survey</title>
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,6 +21,7 @@
 
 <script src="js/config.js"></script>
 <script src="js/cases.js"></script>
+<script src="js/art.js"></script>
 <script src="js/key.js"></script>
 <script src="js/order.js"></script>
 <script src="js/scoring.js"></script>
@@ -42,15 +43,16 @@ function dashKeyFromHash(){
    and a file that is an older copy both fail the same test, which is what
    you want: a stale script is the harder of the two to spot. */
 const MODULES = [
-  ["js/config.js",    () => typeof CONFIG === "object" && "contactAt" in CONFIG && "instrumentVersion" in CONFIG],
-  ["js/cases.js",     () => typeof CASES !== "undefined" && typeof CASE_AFTER !== "undefined"],
+  ["js/config.js",    () => typeof CONFIG === "object" && "aiConditions" in CONFIG && "instrumentVersion" in CONFIG],
+  ["js/cases.js",     () => typeof CASES !== "undefined" && typeof ACTIONS !== "undefined" && typeof PRACTICE !== "undefined"],
+  ["js/art.js",       () => typeof ART === "object"],
   ["js/key.js",       () => typeof KEY !== "undefined"],
   ["js/order.js",     () => typeof constrainedShuffle === "function"],
-  ["js/scoring.js",   () => typeof scorePlan === "function" && typeof instrumentMeta === "function"],
+  ["js/scoring.js",   () => typeof scorePlan === "function" && typeof aiAssignment === "function"],
   ["js/stats.js",     () => typeof mean === "function"],
   ["js/storage.js",   () => typeof mergeRecords === "function" && typeof archivedRows === "function"],
-  ["js/survey.js",    () => typeof startSurvey === "function" && typeof caseSequence === "function"],
-  ["js/dashboard.js", () => typeof showDashboard === "function" && typeof rawExport === "function" && typeof recordState === "function"]
+  ["js/survey.js",    () => typeof startSurvey === "function" && typeof pageFinal === "function"],
+  ["js/dashboard.js", () => typeof showDashboard === "function" && typeof rawExport === "function" && typeof decisionRows === "function"]
 ];
 function missingModules(){
   return MODULES.filter(m => { try{ return !m[1](); }catch(e){ return true; } }).map(m => m[0]);

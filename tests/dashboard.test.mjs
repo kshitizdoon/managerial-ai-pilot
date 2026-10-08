@@ -1,54 +1,97 @@
 /* Researcher dashboard arithmetic (dashboard.js, stats.js): which
-   records reach the statistics, and the analytical CSV. */
+   records reach the statistics, person and decision rows, and the CSV. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { loadSite, plain } from "./helpers/load.mjs";
-import { makeRecord } from "./helpers/records.mjs";
+import { makeRecord, earlierPilotRecord } from "./helpers/records.mjs";
 
 const site = loadSite();
-const rows = recs => plain(site.run(`personRows(${JSON.stringify(recs)})`));
+const J = x => JSON.stringify(x);
+const rows = recs => plain(site.run(`personRows(${J(recs)})`));
 
-test("only finished records with all six cases enter the statistics", () => {
+test("only finished records of this instrument with every decision answered enter the statistics", () => {
   const recs = [
     makeRecord(site, { pid: "done6" }),
     makeRecord(site, { pid: "prog6", done: false }),
     makeRecord(site, { pid: "prog2", done: false, firsts: 3, finals: 2 }),
-    makeRecord(site, { pid: "bg", done: false, firsts: 0, finals: 0 })
+    makeRecord(site, { pid: "bg", done: false, firsts: 0, finals: 0 }),
+    makeRecord(site, { pid: "short", firsts: 5, finals: 5 }),
+    makeRecord(site, { pid: "nofinal", finals: 5 }),
+    earlierPilotRecord("old")
   ];
   assert.deepEqual(rows(recs).map(p => p.pid), ["done6"]);
 });
 
-test("a finished record with fewer than six completed cases never enters the statistics", () => {
-  assert.deepEqual(rows([makeRecord(site, { pid: "short", firsts: 5, finals: 5 })]), []);
+test("a record missing one decision's final answer is not complete", () => {
+  const r = makeRecord(site, { pid: "gap" });
+  delete r.cases[3].final.career;
+  assert.equal(plain(site.run(`recordState(${J(r)})`)), "anomalous");
+  assert.deepEqual(rows([r]), []);
 });
 
-test("person rows score first and final plans with the key", () => {
-  const [p] = rows([makeRecord(site, { pid: "a", version: "A" })]);
+test("preferred answers everywhere score 100 per caselet; AI levels follow the condition", () => {
+  const [p] = rows([makeRecord(site, { pid: "a", condition: 0 })]);
   assert.equal(p.cases.length, 6);
-  assert.deepEqual(p.cases.map(c => c.id), [1, 2, 3, 4, 5, 6]);
-  /* first plans alternate the B and A AI plans; version A is good on 1, 3, 5 */
-  assert.deepEqual(p.cases.map(c => c.good), [true, false, true, false, true, false]);
-  const expectFirst = plain(site.run(`CASES.map((c,i) => scorePlan(c.id, aiPlan(c, i % 2 ? "A" : "B", "split"), "split").total)`));
-  assert.deepEqual(p.cases.map(c => c.first), expectFirst);
-  assert.deepEqual(p.cases.map(c => c.final), expectFirst, "kept plans score the same");
-  assert.equal(p.mda, expectFirst.reduce((a, b) => a + b) / 6);
-  assert.equal(p.totalMin, 20);
+  assert.deepEqual(p.cases.map(c => c.first), [100, 100, 100, 100, 100, 100]);
+  assert.deepEqual(p.cases.map(c => c.final), [100, 100, 100, 100, 100, 100]);
+  assert.equal(p.mda, 100);
+  assert.deepEqual(p.cases.map(c => [c.id, c.level, c.aiScore]),
+    [[3, "high", 94], [2, "moderate", 74], [5, "low", 48], [4, "very_low", 22], [1, "high", 94], [6, "moderate", 74]]);
+  assert.equal(p.practiceCorrect, true);
+  assert.equal(p.totalMin, 30);
 });
 
-test("CSV has one row per person and case, with a fixed header", () => {
-  const per = [makeRecord(site, { pid: "a" }), makeRecord(site, { pid: "b", version: "B" })];
-  const csv = plain(site.run(`toCSV(personRows(${JSON.stringify(per)}))`)).split("\n");
-  assert.equal(csv.length, 1 + 12);
-  assert.deepEqual(csv[0].split(",").slice(0, 16), ["pid", "version", "defer_mode", "programme", "experience", "managed",
-    "ai_use", "undergrad", "cat", "case_id", "case_name", "position", "ai_quality", "first_score", "final_score", "ai_plan_score"]);
-  assert.ok(csv.slice(1).every(l => l.startsWith("a,") || l.startsWith("b,")));
+test("taking all the AI advice moves the final score to the advice score", () => {
+  const [p] = rows([makeRecord(site, { pid: "b", condition: 2, first: "own", final: "ai" })]);
+  for (const c of p.cases) {
+    assert.equal(c.final, c.aiScore);
+    assert.equal(c.gain, c.final - c.first);
+    for (const d of c.decisions) {
+      assert.equal(d.final, d.ai);
+      assert.equal(d.tookAI, d.first !== d.ai);
+      assert.equal(d.changed, d.first !== d.final);
+    }
+  }
+  /* every Own first answer: Monday scores 15+4+20+20+11 */
+  assert.equal(p.cases.find(c => c.id === 3).first, 70);
 });
 
-test("CSV quotes values with commas and quotes", () => {
+test("decision rows: one per person and decision, with the leave-one-out ability", () => {
+  const per = plain(site.run(`personRows(${J([makeRecord(site, { pid: "a" }), makeRecord(site, { pid: "b", first: "wait" })])})`));
+  const dr = plain(site.run(`decisionRows(${J(per)}).map(r => [r.p.pid, r.c.id, r.d.k, r.loo])`));
+  assert.equal(dr.length, 60);
+  assert.ok(dr.filter(r => r[0] === "a").every(r => r[3] === 100));
+});
+
+test("CSV: one row per person and decision, with the manual's fields", () => {
+  const per = [makeRecord(site, { pid: "a" }), makeRecord(site, { pid: "b", condition: 3 })];
+  const csv = plain(site.run(`toCSV(personRows(${J(per)}))`)).split("\n");
+  assert.equal(csv.length, 1 + 60);
+  const head = csv[0].split(",");
+  for (const col of ["pid", "case_id", "decision_id", "first_action", "final_action", "ai_action", "ai_condition", "ai_level",
+                     "ai_text", "decision_ms_first", "decision_ms_final", "confidence", "instrument_version", "recorded_key_hash"])
+    assert.ok(head.includes(col), "missing column " + col);
+  /* a row parses back to the right decision */
+  const parse = line => { const out = []; let cur = "", q = false;
+    for (const ch of line) { if (q) { if (ch === '"') q = false; else cur += ch; } else if (ch === '"') q = true; else if (ch === ",") { out.push(cur); cur = ""; } else cur += ch; }
+    out.push(cur); return out; };
+  const row = Object.fromEntries(head.map((h, i) => [h, parse(csv[1])[i]]));
+  assert.equal(row.pid, "a");
+  assert.equal(row.case_id, "3");
+  assert.equal(row.decision_id, "escalation");
+  assert.equal(row.first_action, "delegate");
+  assert.equal(row.ai_level, "high");
+  assert.equal(row.ai_action, "delegate");
+  assert.match(row.ai_text, /^Lead has the most direct knowledge/);
+  assert.equal(row.first_score, "20");
+  assert.equal(row.instrument_version, "survey-2026-10-round2");
+});
+
+test("CSV quotes values with commas, quotes and newlines", () => {
   const r = makeRecord(site, { pid: "q" });
-  r.bg.programme = 'PGP, "year" 1';
-  const line = plain(site.run(`toCSV(personRows(${JSON.stringify([r])}))`)).split("\n")[1];
-  assert.ok(line.includes('"PGP, ""year"" 1"'));
+  r.cases[3].reason = 'kept, "mostly"\nchanged one';
+  const csv = plain(site.run(`toCSV(personRows(${J([r])}))`));
+  assert.ok(csv.includes('"kept, ""mostly""\nchanged one"'));
 });
 
 test("stats helpers", () => {

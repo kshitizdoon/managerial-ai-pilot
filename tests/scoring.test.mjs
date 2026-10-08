@@ -1,155 +1,130 @@
-/* Scoring, the key, and the AI-plan manipulation. These pin today's
-   values: if one of them fails, the instrument or its scoring changed. */
+/* The instrument against the 8 October 2026 manual, the key, scoring,
+   the AI advice levels and their assignment. If one of these fails, the
+   instrument or its scoring changed. */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadSite, plain } from "./helpers/load.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { loadSite, plain, ROOT } from "./helpers/load.mjs";
 
 const site = loadSite();
 const run = src => plain(site.run(src));
+/* parsed from Managerial_Decision_Survey_Manual_v3_round2 (tracked changes accepted) */
+const MANUAL = JSON.parse(fs.readFileSync(path.join(ROOT, "tests/fixtures/manual-2026-10-08.json"), "utf8"));
+const LEVEL = { high: "high", moderate: "moderate", low: "low", very_low: "very_low" };
 
-/* [caseId, goodVersion, {A:[splitTotal, mergedTotal], B:[...]}] */
-const EXPECTED_AI_TOTALS = [
-  [1, "A", { A: [100, 100], B: [43.75, 67.5] }],
-  [2, "B", { A: [51.25, 80], B: [100, 100] }],
-  [3, "A", { A: [100, 100], B: [68.75, 69.16666666666667] }],
-  [4, "B", { A: [42.5, 59.166666666666664], B: [100, 100] }],
-  [5, "A", { A: [100, 100], B: [46.875, 62.5] }],
-  [6, "B", { A: [46.25, 68.33333333333333], B: [100, 100] }]
-];
-/* split-mode component scores of every weak plan */
-const EXPECTED_WEAK_PARTS = {
-  1: { own: 45, del: 100, wait: 0, hold: 30, set: 57.5 },
-  2: { own: 70, del: 100, wait: 20, hold: 15, set: 70 },
-  3: { own: 55, del: 85, wait: 100, hold: 35, set: 67.5 },
-  4: { own: 55, del: 60, wait: 45, hold: 10, set: 62.5 },
-  5: { own: 55, del: 72.5, wait: 45, hold: 15, set: 60 },
-  6: { own: 55, del: 50, wait: 70, hold: 10, set: 100 }
-};
-/* the AI plans as written in cases.js */
-const EXPECTED_AI_PLANS = {
-  1: { A: ["ops", { supplier: "arjun", retailer: "priya" }, "marketing", "quality"],
-       B: ["retailer", { supplier: "arjun", marketing: "kabir" }, "quality", "ops"] }
-};
-
-test("six cases with ids 1-6 and five issues each", () => {
-  assert.deepEqual(run("CASES.map(c => c.id)"), [1, 2, 3, 4, 5, 6]);
-  assert.deepEqual(run("CASES.map(c => c.issues.length)"), [5, 5, 5, 5, 5, 5]);
-  assert.deepEqual(run("CASES.map(c => c.people.length)"), [4, 4, 4, 4, 4, 4]);
+test("six caselets in the manual's order, with stable ids", () => {
+  assert.deepEqual(run("CASES.map(c => [c.id, c.name])"), [
+    [3, "Monday Project Team"], [2, "Strong Employee"], [5, "Fest Week"],
+    [4, "Friday Support Team"], [1, "Launch Morning"], [6, "Day Before Travel"]]);
+  assert.deepEqual(run("CASES.map(c => c.decisions.length)"), [5, 5, 5, 5, 5, 5]);
 });
 
-test("AI-plan totals are unchanged in both modes", () => {
-  for (const [id, good, totals] of EXPECTED_AI_TOTALS) {
-    assert.equal(run(`caseById(${id}).goodVersion`), good, `case ${id} good version`);
-    for (const v of ["A", "B"]) {
-      const split = run(`scorePlan(${id}, aiPlan(caseById(${id}), "${v}", "split"), "split").total`);
-      const merged = run(`scorePlan(${id}, aiPlan(caseById(${id}), "${v}", "merged"), "merged").total`);
-      assert.equal(split, totals[v][0], `case ${id} version ${v} split`);
-      assert.equal(merged, totals[v][1], `case ${id} version ${v} merged`);
+test("caselet text matches the manual word for word", () => {
+  const cases = run("CASES");
+  MANUAL.cases.forEach((m, i) => {
+    const c = cases[i];
+    assert.equal(c.name, m.name);
+    assert.equal(c.when, m.when, m.name + " time");
+    assert.equal(c.opening, m.opening, m.name + " opening");
+    assert.deepEqual(c.decisions.map(d => [d.n, d.t]), m.decisions.map(d => [d.n, d.t]), m.name + " decisions");
+  });
+});
+
+test("instructions and the four definitions match the manual", () => {
+  assert.equal(run("INSTRUCTIONS"), MANUAL.instructions);
+  assert.deepEqual(run("ACTIONS.map(a => [a[1], a[3]])"), MANUAL.definitions);
+  assert.deepEqual(run("ACTIONS.map(a => a[0])"), ["own", "delegate", "wait", "hold"]);
+});
+
+test("key matches the manual for all 30 decisions", () => {
+  MANUAL.cases.forEach((m, i) => {
+    const id = run(`CASES[${i}].id`);
+    const rows = run(`CASES[${i}].decisions.map(d => [d.n, KEY[${id}][d.k], preferredAction(${id}, d.k)])`);
+    rows.forEach(([n, k, pref], j) => {
+      const want = MANUAL.key[m.name][j];
+      assert.equal(n, want.n);
+      assert.deepEqual(k, { own: want.own, delegate: want.delegate, wait: want.wait, hold: want.hold }, `${m.name} / ${n}`);
+      assert.equal(pref, want.preferred, `${m.name} / ${n} preferred`);
+    });
+  });
+});
+
+test("AI advice matches the manual: action and reason, every level, every decision", () => {
+  MANUAL.cases.forEach((m, i) => {
+    for (const l of Object.keys(LEVEL)) {
+      const got = run(`(() => { const c = CASES[${i}], p = aiPlan(c, "${l}"); return c.decisions.map(d => [d.n, p.actions[d.k], p.why[d.k]]); })()`);
+      assert.deepEqual(got, MANUAL.ai[m.name][l].map(x => [x.n, x.action, x.why]), `${m.name} ${l}`);
     }
+  });
+});
+
+test("AI advice scores 94 / 74 / 48 / 22 with 4 / 3 / 2 / 0 preferred actions in every caselet", () => {
+  const got = run(`CASES.map(c => AI_LEVELS.map(l => { const s = scorePlan(c.id, aiPlan(c, l).actions); return [s.total, s.matches]; }))`);
+  got.forEach(row => assert.deepEqual(row, [[94, 4], [74, 3], [48, 2], [22, 0]]));
+  MANUAL.cases.forEach((m, i) => {
+    for (const l of Object.keys(LEVEL)) assert.equal(got[i][Object.keys(LEVEL).indexOf(l)][0], MANUAL.ai[m.name].table[l].score);
+  });
+});
+
+test("preferred-action distribution is the manual's audit: 8 Own, 9 Delegate, 6 Wait, 7 Hold", () => {
+  const counts = run(`CASES.map(c => { const n = {own:0, delegate:0, wait:0, hold:0}; c.decisions.forEach(d => n[preferredAction(c.id, d.k)]++); return n; })`);
+  assert.deepEqual(counts.map(n => [n.own, n.delegate, n.wait, n.hold]),
+    [[2, 1, 1, 1], [2, 1, 1, 1], [1, 1, 1, 2], [1, 2, 1, 1], [1, 2, 1, 1], [1, 2, 1, 1]]);
+});
+
+test("scorePlan sums decision scores; a missing answer scores 0", () => {
+  const all = a => run(`(() => { const p = {}; caseById(3).decisions.forEach(d => p[d.k] = "${a}"); return scorePlan(3, p); })()`);
+  assert.equal(all("own").total, 15 + 4 + 20 + 20 + 11);
+  assert.equal(all("hold").total, 3 + 20 + 3 + 4 + 0);
+  assert.deepEqual(all("own").parts, { escalation: 15, expansion: 4, recommendation: 20, recovery: 20, career: 11 });
+  assert.equal(all("own").matches, 2);
+  assert.equal(run(`scorePlan(3, {escalation:"delegate"}).total`), 20);
+  assert.equal(run(`decisionScore(3, "escalation", "nonsense")`), 0);
+  const best = run(`(() => { const p = {}; CASES.forEach(c => c.decisions.forEach(d => p[c.id + d.k] = scorePlan(c.id, {[d.k]: preferredAction(c.id, d.k)}).total)); return Object.values(p); })()`);
+  assert.ok(best.every(x => x === 20));
+});
+
+test("AI assignment: four conditions, every respondent sees all four levels, every caselet every level once", () => {
+  const a = run("[0,1,2,3].map(aiAssignment)");
+  for (const cond of a) {
+    const levels = Object.values(cond);
+    assert.equal(levels.length, 6);
+    assert.deepEqual([...new Set(levels)].sort(), ["high", "low", "moderate", "very_low"]);
+    const n = l => levels.filter(x => x === l).length;
+    assert.deepEqual(["high", "moderate", "low", "very_low"].map(n).sort(), [1, 1, 2, 2]);
   }
+  for (const id of [1, 2, 3, 4, 5, 6]) assert.deepEqual(a.map(c => c[id]).sort(), ["high", "low", "moderate", "very_low"]);
+  assert.equal(run("CONFIG.aiConditions"), 4);
 });
 
-test("weak AI plans keep their component scores", () => {
-  for (const [id, parts] of Object.entries(EXPECTED_WEAK_PARTS)) {
-    const bad = run(`caseById(${id}).goodVersion === "A" ? "B" : "A"`);
-    const s = run(`scorePlan(${id}, aiPlan(caseById(${id}), "${bad}", "split"), "split")`);
-    for (const k of Object.keys(parts)) assert.equal(s[k], parts[k], `case ${id} ${k}`);
-  }
-});
-
-test("case 1 AI plans are as written", () => {
-  for (const v of ["A", "B"]) {
-    const p = run(`aiPlan(caseById(1), "${v}", "split")`);
-    const [own, del, wait, hold] = EXPECTED_AI_PLANS[1][v];
-    assert.deepEqual([p.own, p.del, p.wait, p.hold], [own, del, wait, hold]);
-  }
-});
-
-test("no case carries a merged-only AI plan (aiMerged)", () => {
-  assert.deepEqual(run("CASES.filter(c => c.aiMerged).map(c => c.id)"), []);
-});
-
-test("each version gives exactly three good and three weak AI plans", () => {
-  for (const v of ["A", "B"]) {
-    const good = run(`CASES.filter(c => aiIsGood(c, "${v}")).length`);
-    assert.equal(good, 3, `version ${v}`);
-  }
-  /* and the two versions are mirror images: every case is good in exactly one */
-  assert.deepEqual(run(`CASES.map(c => aiIsGood(c, "A") !== aiIsGood(c, "B"))`), [true, true, true, true, true, true]);
-});
-
-test("the good plan beats the weak plan by at least 15 points in both modes", () => {
-  for (const mode of ["split", "merged"]) {
-    for (const g of run(`aiQualityGaps("${mode}")`)) assert.ok(g.gap >= 15, `case ${g.id} ${mode} gap ${g.gap}`);
-  }
-});
-
-test("checkKey passes on the shipped instrument in both modes", () => {
+test("checkKey passes on the shipped instrument", () => {
   assert.deepEqual(run("checkKey()"), []);
-  const s2 = loadSite();
-  s2.run('CONFIG.deferMode = "merged"');
-  assert.deepEqual(plain(s2.run("checkKey()")), []);
 });
 
-test("checkKey reports missing key entries and a weak manipulation", () => {
-  const s = loadSite();
-  s.run("delete KEY[2].hold.data; delete KEY[3].del.event;");
-  const problems = plain(s.run("checkKey()")).join("\n");
-  assert.match(problems, /case 2: hold score missing for "data"/);
-  assert.match(problems, /case 3: delegate scores missing for "event"/);
-  const w = loadSite();
-  /* make case 1's weak plan score the same as its good plan */
-  w.run(`caseById(1).ai.B = {...caseById(1).ai.A}`);
-  assert.match(plain(w.run("checkKey()")).join("\n"), /case 1 \(Launch morning\).*only 0\.0 points apart/);
+test("checkKey catches a broken key or advice", () => {
+  const cases = [
+    ["KEY[3].escalation.own = 20", /"escalation" must have exactly one action scoring 20/],
+    ["KEY[3].escalation.wait = 25", /"escalation" needs four scores from 0 to 20/],
+    ["delete KEY[2].funding", /no scores for "funding"/],
+    ["KEY[2].extra = {own:1, delegate:1, wait:1, hold:20}", /key scores "extra", which is not a decision/],
+    ["delete caseById(5).ai.low", /no low AI advice/],
+    ["caseById(5).ai.high.venue = ['own', '']", /high AI advice needs an action and a reason for "venue"/],
+    ["caseById(4).ai.moderate = caseById(4).ai.high", /AI advice must get weaker level by level/],
+    ["caseById(6).id = 5", /case id 5 is used twice/],
+    ["KEY[1].announcement = {own:20, delegate:14, wait:0, hold:4}; KEY[1].trainers = {own:20, delegate:14, wait:0, hold:4}", /3 decisions prefer Own; the design allows at most two/]
+  ];
+  for (const [mutate, want] of cases) {
+    const s = loadSite();
+    s.run(mutate);
+    assert.match(plain(s.run("checkKey()")).join("\n"), want, mutate);
+  }
 });
 
-test("key: every issue keys own, wait, hold and all four roster people", () => {
-  const gaps = run(`CASES.flatMap(c => c.issues.flatMap(i => {
-    const K = KEY[c.id], out = [];
-    ["own","wait","hold"].forEach(s => { if(typeof K[s][i.k] !== "number") out.push(c.id+":"+s+":"+i.k); });
-    c.people.forEach(p => { if(typeof K.del[i.k][p[0]] !== "number") out.push(c.id+":del:"+i.k+":"+p[0]); });
-    return out; }))`);
-  assert.deepEqual(gaps, []);
+test("practice item expects Wait then Hold", () => {
+  assert.deepEqual(run("PRACTICE.items.map(i => i.answer)"), ["wait", "hold"]);
 });
 
-test("key: no issue scores 100 on both own and hold", () => {
-  assert.deepEqual(run(`CASES.flatMap(c => c.issues.filter(i => KEY[c.id].own[i.k] === 100 && KEY[c.id].hold[i.k] === 100).map(i => c.id + ":" + i.k))`), []);
-});
-
-test("key: every score is within 0-100", () => {
-  const bad = run(`Object.entries(KEY).flatMap(([id,K]) => [
-    ...["own","wait","hold"].flatMap(s => Object.entries(K[s]).filter(([,v]) => v < 0 || v > 100).map(([k]) => id+":"+s+":"+k)),
-    ...Object.entries(K.del).flatMap(([i,m]) => Object.entries(m).filter(([,v]) => v < 0 || v > 100).map(([p]) => id+":del:"+i+":"+p))])`);
-  assert.deepEqual(bad, []);
-});
-
-test("split score is the mean of own, delegate, wait and hold", () => {
-  const s = run(`scorePlan(1, {own:"quality", del:{supplier:"meera", ops:"arjun"}, wait:"retailer", hold:"marketing"}, "split")`);
-  assert.equal(s.own, 75);
-  assert.equal(s.del, (45 + 60) / 2);
-  assert.equal(s.wait, 45);
-  assert.equal(s.hold, 10);
-  assert.equal(s.total, (75 + 52.5 + 45 + 10) / 4);
-});
-
-test("merged score uses the better wait/hold split of the pair and leaves the hold pick out", () => {
-  const s = run(`scorePlan(1, {own:"ops", del:{supplier:"arjun", retailer:"priya"}, defer:["quality","marketing"], holdPick:null}, "merged")`);
-  assert.equal(s.set, 100);
-  assert.equal(s.hold, null);
-  assert.equal(s.total, 100);
-  const h = run(`scorePlan(1, {own:"ops", del:{supplier:"arjun", retailer:"priya"}, defer:["quality","marketing"], holdPick:"marketing"}, "merged")`);
-  assert.equal(h.hold, 10);
-  assert.equal(h.total, 100, "hold pick is outside the case score by default");
-});
-
-test("an unlisted delegate falls back to CONFIG.unlistedDelegateScore (0)", () => {
-  assert.equal(run("CONFIG.unlistedDelegateScore"), 0);
-  assert.equal(run(`delegateScore(1, "supplier", "nobody")`), 0);
-  assert.equal(run(`delegatePart(1, {})`), 0);
-});
-
-test("samePlan compares scored parts, not menu labels", () => {
-  assert.equal(run(`samePlan(aiPlan(caseById(1),"A","split"), {own:"ops", del:{retailer:"priya", supplier:"arjun"}, wait:"marketing", hold:"quality"}, "split")`), true);
-  assert.equal(run(`samePlan(aiPlan(caseById(1),"A","split"), {own:"ops", del:{retailer:"priya", supplier:"arjun"}, wait:"quality", hold:"marketing"}, "split")`), false);
-  assert.equal(run(`samePlan({own:"ops", del:{a:"x"}, defer:["m","q"], holdPick:null}, {own:"ops", del:{a:"x"}, defer:["q","m"], holdPick:null}, "merged")`), true);
+test("every caselet has an illustration", () => {
+  assert.deepEqual(run("CASES.filter(c => !ART[c.art] || !ART[c.art].startsWith('<svg')).map(c => c.id)"), []);
 });

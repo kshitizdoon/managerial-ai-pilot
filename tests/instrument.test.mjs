@@ -9,35 +9,42 @@ const run = src => plain(site.run(src));
 /* If one of these changes, cases.js or key.js changed. That is allowed,
    but it is a new instrument version: rename CONFIG.instrumentVersion,
    regenerate docs, and update these two pins in the same commit. */
-const PINNED = { instrumentVersion: "pilot-2026-09", casesHash: "8d710671", keyHash: "3588d829", scoringVersion: 1 };
+const PINNED = { instrumentVersion: "survey-2026-10-round2", casesHash: "4242e73d", keyHash: "5505a7da", scoringVersion: 2 };
 
 test("instrumentMeta describes the deployed instrument", () => {
   const m = run("instrumentMeta()");
+  const levels = { high: 94, moderate: 74, low: 48, very_low: 22 };
   assert.deepEqual(m, {
     instrumentVersion: PINNED.instrumentVersion,
     scoringVersion: PINNED.scoringVersion,
     casesHash: PINNED.casesHash,
     keyHash: PINNED.keyHash,
-    scoringConfig: { unlistedDelegateScore: 0, includeHoldInCaseScore: false },
-    caseIds: [1, 2, 3, 4, 5, 6],
-    goodVersion: { 1: "A", 2: "B", 3: "A", 4: "B", 5: "A", 6: "B" }
+    scoringConfig: { decisionMax: 20, caseMax: 100 },
+    caseIds: [3, 2, 5, 4, 1, 6],
+    decisionIds: {
+      3: ["escalation", "expansion", "recommendation", "recovery", "career"],
+      2: ["presentation", "funding", "partner", "appointment", "review"],
+      5: ["registration", "sponsor", "staffing", "venue", "programming"],
+      4: ["escalation", "weekend", "guarantee", "process", "recovery"],
+      1: ["corporate", "announcement", "readiness", "trainers", "roles"],
+      6: ["client", "handover", "opportunity", "development", "review"] },
+    aiLevels: ["high", "moderate", "low", "very_low"],
+    aiConditions: 4,
+    aiScores: { 1: levels, 2: levels, 3: levels, 4: levels, 5: levels, 6: levels }
   });
-  assert.equal(run("RECORD_SCHEMA"), 2);
+  assert.equal(run("RECORD_SCHEMA"), 3);
 });
 
 test("fingerprints ignore key order and catch any content change", () => {
   assert.equal(run(`fingerprint({a:1, b:[1,{c:2, d:3}]})`), run(`fingerprint({b:[1,{d:3, c:2}], a:1})`));
   assert.notEqual(run(`fingerprint({a:1})`), run(`fingerprint({a:2})`));
   const s = loadSite();
-  s.run("KEY[1].own.quality = 76");
+  s.run("KEY[3].escalation.own = 16");
   assert.notEqual(plain(s.run("instrumentMeta().keyHash")), PINNED.keyHash);
   assert.equal(plain(s.run("instrumentMeta().casesHash")), PINNED.casesHash);
   const c = loadSite();
-  c.run(`caseById(2).issues[0].t += " "`);
+  c.run(`caseById(2).decisions[0].t += " "`);
   assert.notEqual(plain(c.run("instrumentMeta().casesHash")), PINNED.casesHash);
-  const g = loadSite();
-  g.run(`CONFIG.unlistedDelegateScore = 40`);
-  assert.equal(plain(g.run(`sameInstrument(${JSON.stringify(run("instrumentMeta()"))})`)), false);
 });
 
 test("sameInstrument: true for this version, false for another, null when not recorded", () => {
@@ -57,7 +64,7 @@ test("checkKey refuses duplicate case ids", () => {
 
 test("caseSequence follows stored case ids, and positions for older records", () => {
   assert.deepEqual(run(`caseSequence({caseOrder:[3,1,6,2,5,4], order:[0,1,2,3,4,5]}).map(c => c.id)`), [3, 1, 6, 2, 5, 4]);
-  assert.deepEqual(run(`caseSequence({order:[2,0,5,1,4,3]}).map(c => c.id)`), [3, 1, 6, 2, 5, 4]);
+  assert.deepEqual(run(`caseSequence({order:[2,0,5,1,4,3]}).map(c => c.id)`), [5, 3, 6, 2, 1, 4]);
 });
 
 test("reordering CASES does not move a new record to other cases", () => {
@@ -65,5 +72,5 @@ test("reordering CASES does not move a new record to other cases", () => {
   s.run("CASES.reverse()");
   assert.deepEqual(plain(s.run(`caseSequence({caseOrder:[3,1,6,2,5,4], order:[2,0,5,1,4,3]}).map(c => c.id)`)), [3, 1, 6, 2, 5, 4]);
   /* an older record only has positions, which is exactly why ids are stored now */
-  assert.deepEqual(plain(s.run(`caseSequence({order:[2,0,5,1,4,3]}).map(c => c.id)`)), [4, 6, 1, 5, 2, 3]);
+  assert.deepEqual(plain(s.run(`caseSequence({order:[2,0,5,1,4,3]}).map(c => c.id)`)), [4, 6, 3, 1, 2, 5]);
 });

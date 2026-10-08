@@ -1,29 +1,26 @@
 /* =============================================================
-   scoring.js — turns a plan into scores. Two modes.
+   scoring.js — turns answers into scores, and checks the key.
 
-   split   CaseScore = (Own + Delegate + Wait + Hold) / 4
-   merged  CaseScore = (Own + Delegate + DeferSet) / 3
-           DeferSet scores WHICH TWO issues were set aside, not which of
-           the two got which label. The hold follow-up is scored on its
-           own as holdScore, outside the case score.
-
-   A plan looks like:
-     {own:"quality", del:{supplier:"arjun", retailer:"priya"},
-      wait:"marketing", hold:"quality"}            // split
-     {own:"quality", del:{...}, defer:["marketing","retailer"],
-      holdPick:"marketing"|null}                    // merged
+   A plan is one action per decision:
+     {escalation:"delegate", expansion:"hold", recommendation:"own", ...}
+   A decision scores KEY[caseId][decision][action], 0 to 20.
+   A case score is the sum over its five decisions, 0 to 100.
+   The AI advice is a plan too, and is scored the same way.
    ============================================================= */
 
 function caseById(id){ return CASES.find(c => c.id === id); }
+const ACTION_KEYS = ["own", "delegate", "wait", "hold"];
+const AI_LEVELS = ["high", "moderate", "low", "very_low"];
 
 /* ---- instrument version ---------------------------------------------
    instrumentMeta() is stamped once on every new response (survey.js) and
    never changed after that. The fingerprints follow cases.js and key.js
    by themselves; SCORING_VERSION is the one to bump by hand when the
    rules in this file change. RECORD_SCHEMA is the shape of a saved
-   response: records without a schemaVersion field are version 1. */
-const SCORING_VERSION = 1;
-const RECORD_SCHEMA = 2;
+   response: records without a schemaVersion field are version 1, the
+   earlier pilot with quotas and named delegates is version 2. */
+const SCORING_VERSION = 2;
+const RECORD_SCHEMA = 3;
 
 /* JSON with sorted object keys, so the same content always hashes the same */
 function stableJSON(x){
@@ -41,17 +38,19 @@ function fingerprint(x){
   return ("0000000" + h.toString(16)).slice(-8);
 }
 function instrumentMeta(){
-  const good = {};
-  CASES.forEach(c => { good[c.id] = c.goodVersion; });
+  const aiScores = {};
+  CASES.forEach(c => { aiScores[c.id] = {}; AI_LEVELS.forEach(l => { aiScores[c.id][l] = aiPlanScore(c, l); }); });
   return {
     instrumentVersion: CONFIG.instrumentVersion || null,
     scoringVersion: SCORING_VERSION,
     casesHash: fingerprint(CASES),
     keyHash: fingerprint(KEY),
-    scoringConfig: {unlistedDelegateScore: CONFIG.unlistedDelegateScore,
-                    includeHoldInCaseScore: CONFIG.includeHoldInCaseScore},
+    scoringConfig: {decisionMax: 20, caseMax: 100},
     caseIds: CASES.map(c => c.id),
-    goodVersion: good
+    decisionIds: Object.fromEntries(CASES.map(c => [c.id, c.decisions.map(d => d.k)])),
+    aiLevels: AI_LEVELS,
+    aiConditions: CONFIG.aiConditions,
+    aiScores
   };
 }
 /* Was this record made with the cases, key and scoring deployed now?
@@ -63,121 +62,82 @@ function sameInstrument(meta){
          meta.scoringVersion === now.scoringVersion &&
          stableJSON(meta.scoringConfig) === stableJSON(now.scoringConfig);
 }
-function keyFor(id){ return KEY[id]; }
 
-function delegateScore(id, issue, person){
-  const k = keyFor(id).del[issue] || {};
-  return (person != null && k[person] != null) ? k[person] : CONFIG.unlistedDelegateScore;
+/* ---- scores ----------------------------------------------------------- */
+function decisionScore(caseId, k, action){
+  const row = (KEY[caseId] || {})[k];
+  return row && row[action] != null ? row[action] : 0;
 }
-
-/* mean delegate score over the two delegations */
-function delegatePart(id, del){
-  const ks = Object.keys(del || {});
-  if(!ks.length) return 0;
-  return ks.reduce((s,i) => s + delegateScore(id, i, del[i]), 0) / ks.length;
+function preferredAction(caseId, k){
+  const row = (KEY[caseId] || {})[k] || {};
+  return ACTION_KEYS.reduce((best, a) => (row[a] ?? -1) > (row[best] ?? -1) ? a : best, ACTION_KEYS[0]);
 }
-
-/* best of the two ways to split a deferred pair between wait and hold */
-function deferSetScore(id, pair){
-  const K = keyFor(id);
-  if(!pair || pair.length !== 2) return 0;
-  const [a,b] = pair;
-  const one = ((K.wait[a] ?? 0) + (K.hold[b] ?? 0)) / 2;
-  const two = ((K.wait[b] ?? 0) + (K.hold[a] ?? 0)) / 2;
-  return Math.max(one, two);
-}
-
-function scorePlan(id, plan, mode){
-  const K = keyFor(id);
-  const own = K.own[plan.own] ?? 0;
-  const del = delegatePart(id, plan.del);
-
-  if((mode || CONFIG.deferMode) === "merged"){
-    const pair = plan.defer || [];
-    const set = deferSetScore(id, pair);
-    const hold = plan.holdPick ? (K.hold[plan.holdPick] ?? 0) : null;
-    const parts = [own, del, set];
-    if(CONFIG.includeHoldInCaseScore && hold != null) parts.push(hold);
-    return {own, del, set, hold, wait:null,
-            total: parts.reduce((a,b)=>a+b,0) / parts.length};
-  }
-
-  const wait = K.wait[plan.wait] ?? 0;
-  const hold = K.hold[plan.hold] ?? 0;
-  return {own, del, wait, hold, set:deferSetScore(id, [plan.wait, plan.hold]),
-          total:(own + del + wait + hold) / 4};
-}
-
-/* the same plan scored the other way, so the dashboard can compare */
-function scoreBothWays(id, plan){
-  const split = plan.wait ? scorePlan(id, plan, "split") : null;
-  const asPair = plan.defer || (plan.wait ? [plan.wait, plan.hold] : []);
-  const merged = scorePlan(id, {own:plan.own, del:plan.del, defer:asPair,
-                               holdPick:plan.holdPick ?? plan.hold}, "merged");
-  return {split, merged};
-}
-
-/* did the wait/hold split match the key, given the pair chosen? */
-function splitMatchesKey(id, pair, waitPick){
-  const K = keyFor(id); if(!pair || pair.length !== 2) return null;
-  const [a,b] = pair;
-  const best = ((K.wait[a]??0)+(K.hold[b]??0)) >= ((K.wait[b]??0)+(K.hold[a]??0)) ? a : b;
-  return waitPick === best;
-}
-
-/* how many case-score points the wait/hold split is worth, given the pair */
-function splitSwing(id, pair){
-  const K = keyFor(id); if(!pair || pair.length !== 2) return 0;
-  const [a,b] = pair;
-  return Math.abs(((K.wait[a]??0)+(K.hold[b]??0)) - ((K.wait[b]??0)+(K.hold[a]??0))) / 4;
-}
-
-/* the AI plan, in plan shape, for a given version.
-   A case may carry a second set of plans under aiMerged, used when the
-   deferral question is merged. Needed where a plan's only flaw is the
-   wait/hold split, which merged scoring ignores. */
-function activeMode(){
-  return (typeof ST !== "undefined" && ST && ST.deferMode) || CONFIG.deferMode;
-}
-function aiPlan(c, version, mode){
-  const m = mode || activeMode();
-  const a = (m === "merged" && c.aiMerged && c.aiMerged[version]) ? c.aiMerged[version] : c.ai[version];
-  return {own:a.own, del:{...a.del}, wait:a.wait, hold:a.hold,
-          defer:a.defer ? [...a.defer] : [a.wait, a.hold],
-          holdPick:a.holdPick !== undefined ? a.holdPick : a.hold, why:a.why};
-}
-
-/* how far apart the good and the bad plan are, in the mode you are fielding */
-function aiQualityGaps(mode){
-  const m = mode || activeMode();
-  return CASES.map(c => {
-    const badV = c.goodVersion === "A" ? "B" : "A";
-    const good = scorePlan(c.id, aiPlan(c, c.goodVersion, m), m).total;
-    const bad  = scorePlan(c.id, aiPlan(c, badV, m), m).total;
-    return {id:c.id, name:c.name, good, bad, gap:good - bad};
+/* {total 0-100, parts {k: 0-20}, matches: how many preferred actions} */
+function scorePlan(caseId, plan){
+  const c = caseById(caseId), parts = {};
+  let total = 0, matches = 0;
+  c.decisions.forEach(d => {
+    const a = plan && plan[d.k];
+    parts[d.k] = decisionScore(caseId, d.k, a);
+    total += parts[d.k];
+    if(a && a === preferredAction(caseId, d.k)) matches++;
   });
+  return {total, parts, matches};
 }
-const aiIsGood = (c, version) => c.goodVersion === version;
 
-/* sanity check on load: every issue must be in the key */
+/* ---- AI advice -------------------------------------------------------- */
+/* the advice for one caselet at one level: {actions:{k}, why:{k}} */
+function aiPlan(c, level){
+  const a = c.ai[level], actions = {}, why = {};
+  c.decisions.forEach(d => { actions[d.k] = a[d.k][0]; why[d.k] = a[d.k][1]; });
+  return {level, actions, why};
+}
+function aiPlanScore(c, level){ return scorePlan(c.id, aiPlan(c, level).actions).total; }
+
+/* The level each caselet gets under one condition. Caselet i, in
+   cases.js order, gets AI_LEVELS[(i + condition) mod 4]. */
+function aiAssignment(condition){
+  const out = {};
+  CASES.forEach((c, i) => { out[c.id] = AI_LEVELS[(i + condition) % AI_LEVELS.length]; });
+  return out;
+}
+
+/* ---- load-time check -------------------------------------------------- */
 function checkKey(){
   const problems = [];
-  /* saved responses find their cases by id, so ids must be unique */
   const ids = CASES.map(c => c.id);
   ids.forEach((id, i) => { if(ids.indexOf(id) !== i) problems.push(`case id ${id} is used twice`); });
   CASES.forEach(c => {
     const K = KEY[c.id];
     if(!K){ problems.push(`case ${c.id}: no key`); return; }
-    c.issues.forEach(i => {
-      ["own","wait","hold"].forEach(sl => {
-        if(K[sl][i.k] == null) problems.push(`case ${c.id}: ${sl} score missing for "${i.k}"`);
-      });
-      if(!K.del[i.k]) problems.push(`case ${c.id}: delegate scores missing for "${i.k}"`);
+    const keys = c.decisions.map(d => d.k);
+    if(keys.length !== 5) problems.push(`case ${c.id}: ${keys.length} decisions, expected 5`);
+    keys.forEach((k, i) => { if(keys.indexOf(k) !== i) problems.push(`case ${c.id}: decision id "${k}" is used twice`); });
+    Object.keys(K).forEach(k => { if(!keys.includes(k)) problems.push(`case ${c.id}: key scores "${k}", which is not a decision`); });
+    let ownPreferred = 0;
+    keys.forEach(k => {
+      const row = K[k];
+      if(!row){ problems.push(`case ${c.id}: no scores for "${k}"`); return; }
+      const v = ACTION_KEYS.map(a => row[a]);
+      if(v.some(x => typeof x !== "number" || x < 0 || x > 20)) problems.push(`case ${c.id}: "${k}" needs four scores from 0 to 20`);
+      else if(v.filter(x => x === 20).length !== 1) problems.push(`case ${c.id}: "${k}" must have exactly one action scoring 20`);
+      else if(preferredAction(c.id, k) === "own") ownPreferred++;
     });
-    ["A","B"].forEach(v => { if(!c.ai[v]) problems.push(`case ${c.id}: no version ${v} AI plan`); });
-  });
-  aiQualityGaps().forEach(g => {
-    if(g.gap < 15) problems.push(`case ${g.id} (${g.name}): in "${activeMode()}" mode the good and bad AI plans are only ${g.gap.toFixed(1)} points apart. The manipulation is too weak to estimate anything from. Give this case an aiMerged plan in cases.js.`);
+    if(ownPreferred > 2) problems.push(`case ${c.id}: ${ownPreferred} decisions prefer Own; the design allows at most two`);
+    AI_LEVELS.forEach(l => {
+      const a = c.ai && c.ai[l];
+      if(!a){ problems.push(`case ${c.id}: no ${l} AI advice`); return; }
+      keys.forEach(k => {
+        const x = a[k];
+        if(!x || !ACTION_KEYS.includes(x[0]) || !String(x[1] || "").trim())
+          problems.push(`case ${c.id}: ${l} AI advice needs an action and a reason for "${k}"`);
+      });
+    });
+    if(!problems.some(p => p.startsWith(`case ${c.id}:`))){
+      const s = AI_LEVELS.map(l => aiPlanScore(c, l));
+      for(let i = 1; i < s.length; i++)
+        if(!(s[i] < s[i - 1])) problems.push(`case ${c.id} (${c.name}): AI advice must get weaker level by level, but scores ${s.join(", ")}`);
+    }
   });
   problems.push(...checkOrderRules());
   if(problems.length){
@@ -185,7 +145,7 @@ function checkKey(){
     try{
       const b = document.createElement("div");
       b.className = "devwarn";
-      b.innerHTML = "<b>Instrument check failed \u2014 fix before fielding</b><ul>" +
+      b.innerHTML = "<b>Instrument check failed — fix before fielding</b><ul>" +
         problems.map(p => "<li>" + p + "</li>").join("") + "</ul>";
       document.body.insertBefore(b, document.body.firstChild);
     }catch(e){}

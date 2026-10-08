@@ -76,44 +76,56 @@ export async function setup(){
     async close(){ await browser.close(); server.close(); } };
 }
 
-/* Plays one full response. menus: one of keep|use_ai|edit_mine per
-   situation, in the order the situations appear. Records, per situation,
-   the issue names in the order each screen showed them. */
-export async function playSurvey(page, base, { menus, finish = true, stopAfterCases = 6, query = "?new=1" } = {}){
-  menus = menus || ["keep", "use_ai", "edit_mine", "keep", "use_ai", "edit_mine"];
+/* Plays one full response. first: the action given to every decision
+   first time ("own" by default; "cycle" rotates through the four).
+   finals: per caselet, "keep" (leave the first answers) or "ai" (switch
+   every decision to the AI's action). Records, per caselet, the
+   decision titles each screen showed and the advice it showed. */
+export async function playSurvey(page, base, { first = "cycle", finals, finish = true, stopAfterCases = 6,
+                                               query = "?new=1", practice = ["wait", "hold"], conf = 3 } = {}){
+  finals = finals || ["keep", "ai", "keep", "ai", "keep", "ai"];
+  const ACTS = ["own", "delegate", "wait", "hold"];
   await page.goto(base + "/" + query);
   await page.click("#begin");
   for(let i = 1; i <= 5; i++) await page.selectOption("#q" + i, { index: 1 });
   await page.click("#next");                                   // About you
   await page.click("#next");                                   // How it works
+  await page.click(`input[name=p-a][value=${practice[0]}]`);
+  await page.click(`input[name=p-b][value=${practice[1]}]`);
+  await page.click("#next");                                   // check
+  await page.click("#next");                                   // continue
   const seen = [];
   for(let n = 0; n < stopAfterCases; n++){
-    const name = await page.textContent("h1");
-    await page.click("#next");                                 // situation intro
-    const s = { name, menu: menus[n] };
-    s.board = await page.$$eval(".issue .name", e => e.map(x => x.textContent));
-    const keys = await page.$$eval(".issue", e => e.map(x => x.dataset.i));
-    const labels = ["own", "delegate", "delegate", "wait", "hold"];
-    for(let i = 0; i < 5; i++){
-      await page.click(`.issue[data-i="${keys[i]}"] .chip[data-l="${labels[i]}"]`);
-      if(labels[i] === "delegate") await page.selectOption(`#a-${keys[i]}`, { index: 1 + (i % 4) });
+    await page.waitForSelector(".sit h2");
+    const s = { name: await page.textContent(".sit h2"), final: finals[n] };
+    s.first = await page.$$eval(".decision h3", e => e.map(x => x.textContent));
+    const keys = await page.$$eval(".decision", e => e.map(x => x.dataset.k));
+    s.keys = keys;
+    s.answers = {};
+    for(let i = 0; i < keys.length; i++){
+      const a = first === "cycle" ? ACTS[(i + n) % 4] : first;
+      s.answers[keys[i]] = a;
+      await page.click(`input[name="a-${keys[i]}"][value=${a}]`);
     }
-    await page.click("input[name=conf][value='3']");
-    await page.click("#next");                                 // save first plan
-    s.recap = await page.$$eval(".recap .rcard b", e => e.map(x => x.textContent));
-    s.aiRows = await page.$$eval(".plans .plan:nth-child(2) .prow span", e => e.map(x => x.textContent));
-    await page.click(`input[name=m][value=${menus[n]}]`);
-    await page.click("#next");
-    if(menus[n] === "edit_mine"){
-      s.final = await page.$$eval(".issue .name", e => e.map(x => x.textContent));
-      await page.click("#next");                               // save final plan unchanged
-    }
+    await page.click("#next");                                 // save first answers
+    await page.waitForSelector(".compare");
+    s.finalTitles = await page.$$eval(".decision h3", e => e.map(x => x.textContent));
+    s.mine = await page.$$eval(".compare .mine b", e => e.map(x => x.dataset.a));
+    s.advice = await page.$$eval(".compare .advice b", e => e.map(x => x.dataset.a));
+    s.adviceText = await page.$$eval(".compare .advice p", e => e.map(x => x.textContent));
+    s.preselected = await page.$$eval(".decision", e => e.map(x => (x.querySelector("input:checked") || {}).value));
+    if(finals[n] === "ai")
+      for(let i = 0; i < keys.length; i++) await page.click(`input[name="b-${keys[i]}"][value=${s.advice[i]}]`);
+    if(conf) await page.click(`.seg input[value='${conf}']`, { force: true });
+    await page.click("#next");                                 // save final answers
     seen.push(s);
   }
   if(finish && stopAfterCases === 6){
     for(const id of ["e1", "e2", "f1", "f2", "f5"]) await page.selectOption("#" + id, { index: 1 });
     await page.click("#next");
     await page.waitForSelector("h1:text('Thank you')");
+  } else if(stopAfterCases === 6){
+    await page.waitForSelector("#e1");
   }
   const record = await page.evaluate(() => JSON.parse(localStorage.getItem("inbasket_pilot_v2")));
   return { seen, record };

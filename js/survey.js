@@ -1,5 +1,10 @@
 /* =============================================================
    survey.js — the respondent's side.
+
+   Flow: welcome and consent, About you, how it works, a Wait/Hold
+   practice question, then for each of six caselets: five first answers,
+   then the AI advice beside each decision with five final answers and
+   an optional confidence and reason. Last questions, thank you.
    ============================================================= */
 
 const app = () => document.getElementById("app");
@@ -22,17 +27,11 @@ function paint(html, wide){
   a.innerHTML = html;
   window.scrollTo(0,0);
   pageStart = Date.now();
-  const b = a.querySelector(".board.fade");
+  const b = a.querySelector(".fade");
   if(b) requestAnimationFrame(()=> requestAnimationFrame(()=> b.classList.add("in")));
 }
 
-/* label sets by mode ----------------------------------------------------- */
-function labelSet(){
-  return ST.deferMode === "merged"
-    ? [["own","Own",1],["delegate","Delegate",2],["defer","Set aside",2]]
-    : [["own","Own",1],["delegate","Delegate",2],["wait","Wait",1],["hold","Hold",1]];
-}
-const need = k => (labelSet().find(l => l[0] === k) || [,,0])[2];
+const actionLabel = a => (ACTIONS.find(x => x[0] === a) || [a, a])[1];
 
 /* ------------------------------------------------------------------ start */
 function startSurvey(){
@@ -53,14 +52,12 @@ function startSurvey(){
     if(!ST.savedVia) retryFinalSave();
     return thanks();
   }
-  if(saved && saved.order){
+  /* An unfinished response from an earlier version of the survey cannot
+     continue on these caselets. Keep it (server, device archive) and
+     start this person afresh. */
+  if(saved && saved.pid && saved.schemaVersion !== RECORD_SCHEMA) return startFresh();
+  if(saved && saved.caseOrder){
     ST = saved;
-    /* a session left half-finished on this browser before "Edit the AI's
-       plan" was removed: send it to the editor it would get today, seeded
-       from the respondent's own plan. Finished records are untouched. */
-    Object.keys(ST.cases || {}).forEach(k => {
-      const r = ST.cases[k]; if(r && r.menu === "edit_ai" && !r.final) r.menu = "edit_mine";
-    });
     return resumePrompt();
   }
   welcome();
@@ -93,7 +90,10 @@ function startFresh(){
   const old = loadLocal();
   if(old && old.pid){
     const needsSave = !old.done || !old.savedVia || old.lastServerSaveOK === false;
-    if(needsSave) checkpointResponse(old, old.done ? "finish_retry_on_new_session" : "left_unfinished_on_device");
+    const why = old.done ? "finish_retry_on_new_session"
+              : old.schemaVersion !== RECORD_SCHEMA ? "left_unfinished_instrument_changed"
+              : "left_unfinished_on_device";
+    if(needsSave) checkpointResponse(old, why);
     archiveLocal();
   }
   clearLocal();
@@ -122,7 +122,7 @@ async function retryFinalSave(){
 }
 
 /* Name and mobile. Default is the end of the survey: if a respondent gives
-   a name before answering, the plans stop being anonymous while they are
+   a name before answering, the answers stop being anonymous while they are
    being made, and a managerial-judgement task is exactly the kind people
    answer differently when it carries their name. Flip CONFIG.contactAt to
    "start" if you would rather have it first. */
@@ -155,14 +155,13 @@ function welcome(){
   setStep("Welcome", 0);
   paint(`
    <h1>${esc(CONFIG.studyTitle)}</h1>
-   <p class="serif lead">You will be given six situations. Each situation has five issues. You give every issue one label.</p>
-   <p class="serif">You decide what to handle yourself, what to hand to someone on your team, and what to set aside for now.</p>
-   <p class="serif">After your plan is recorded, an AI advisor shows you its plan for the same situation. You then decide what your final plan is.</p>
+   <p class="serif lead">You will be given six situations. Each situation has five decisions. For each decision you choose one of four actions: Own, Delegate, Wait or Hold.</p>
+   <p class="serif">You decide which decisions to make yourself now, which to hand to someone on your team, and which to leave for later or until something you need is in place.</p>
+   <p class="serif">After your answers are recorded, an AI advisor shows its recommendations for the same five decisions. You then give your final answers.</p>
    <div class="card small">
-     <p>Please do it in one sitting, without looking anything up.</p>
+     <p>Please do it in one sitting, without breaks and without looking anything up.</p>
      <p>Your answers are used for a student research project at IIM Ahmedabad. You are not asked who you are while you work through the situations.</p>
      <p>At the end you can leave a name and mobile number to enter the prize draw. That is optional, and if you give it, it is saved with your answers rather than kept apart from them.</p>
-     <p style="margin:0">You can stop at any time by closing the page.</p>
      <p style="margin:0">There are no trick questions and no right answer you are expected to guess.</p>
    </div>
    ${CONFIG.contactAt === "start" ? contactHTML() : ""}
@@ -194,10 +193,14 @@ function background(){
     if(v.some(x => !x)){ document.getElementById("e").textContent = "Please answer all five."; return; }
     const url = new URLSearchParams(location.search);
     const order = caseOrder();
+    const forced = parseInt(url.get("ai"), 10);
+    const condition = forced >= 0 && forced < CONFIG.aiConditions ? forced : Math.floor(Math.random() * CONFIG.aiConditions);
     ST = {
       pid: uid(),
-      version: Math.random() < 0.5 ? "A" : "B",
-      deferMode: url.get("defer") || CONFIG.deferMode,
+      /* treatment: set once here. aiLevels[caseId] is the quality level
+         of the advice that caselet shows this respondent. */
+      aiCondition: condition,
+      aiLevels: aiAssignment(condition),
       started: new Date().toISOString(),
       bg: {programme:v[0], experience:v[1], managed:v[2], aiUse:v[3], undergrad:v[4]},
       /* caseOrder holds case ids and is what the survey follows. order
@@ -213,33 +216,61 @@ function background(){
     };
     saveLocal(ST);
     checkpointResponse(ST, "background_complete");
-    howItWorks();
+    route();
   };
+}
+
+/* the four actions with their full definitions */
+function definitionsHTML(){
+  return `<dl class="defs">${ACTIONS.map(([k,n,,def]) =>
+    `<div data-a="${k}"><dt>${n}</dt><dd>${esc(def)}</dd></div>`).join("")}</dl>`;
 }
 
 function howItWorks(){
   setStep("How it works", 7);
-  const merged = ST.deferMode === "merged";
   paint(`
    <h2>How it works</h2>
    <div class="card serif">
-     <p>Each situation has five issues. You give every issue one label.</p>
-     <p style="margin:.55rem 0"><b>What you are judged on.</b> In every situation you are responsible for how your unit performs over the next three months, not only today. The people on your team are part of what has to keep working over that period.</p>
-     <p style="margin:.55rem 0">
-       <b style="color:var(--own)">Own</b> — you handle it yourself now. One issue.<br>
-       <b style="color:var(--del)">Delegate</b> — someone on your team handles it. Two issues, and you choose who.<br>
-       ${merged
-         ? `<b style="color:var(--wait)">Set aside</b> — you are not acting on it right now. Two issues.`
-         : `<b style="color:var(--wait)">Wait</b> — it can safely be picked up later. One issue.<br>
-            <b style="color:var(--hold)">Hold</b> — nobody should act on it until one missing fact is checked. One issue.`}
-     </p>
-     ${merged
-       ? `<p style="margin:0">After you set two aside, we ask one more question about them.</p>`
-       : `<p style="margin:0">Wait and Hold are different. Wait is about timing. Hold is about a fact you do not have yet.</p>`}
+     <p style="margin-top:0">${esc(INSTRUCTIONS)}</p>
+     ${definitionsHTML()}
    </div>
-   <p class="small muted">Your first plan in each situation is saved before you see the AI advisor, and cannot be changed afterwards. You can still choose a different final plan.</p>
+   <p class="small muted">Your first answers in each situation are saved before you see the AI advisor, and cannot be changed afterwards. You can still choose different final answers.</p>
    <button class="go" id="next">I am ready</button>`);
   document.getElementById("next").onclick = () => { ST.msIntro = since(); saveLocal(ST); route(); };
+}
+
+/* ------------------------------------------------------------- practice */
+/* One practice screen on Wait versus Hold. Not scored; the answers and
+   whether they matched are kept, as a comprehension check. */
+function practice(){
+  setStep("Practice", 9);
+  const n = PRACTICE.items.length;
+  paint(`
+   <h2>Practice</h2>
+   <p class="muted">One practice question before the first situation. It is not scored.</p>
+   <div class="decisions">${PRACTICE.items.map((d, i) =>
+     decisionCard(d, `Practice ${i+1} of ${n}`, "p")).join("")}</div>
+   <div id="fb" class="card hide"><p style="margin:0" class="serif">${esc(PRACTICE.feedback)}</p></div>
+   <p class="err" id="e"></p>
+   <button class="go" id="next">Check my answers</button>`);
+  const t = wireDecisions("p");
+  let checked = false;
+  document.getElementById("next").onclick = () => {
+    const ans = readDecisions(PRACTICE.items, "p");
+    if(!checked){
+      if(!requireAll(PRACTICE.items, ans)) return;
+      checked = true;
+      ST.practice = {answers: ans, correct: PRACTICE.items.every(d => ans[d.k] === d.answer),
+                     ms: since(), times: t()};
+      app().querySelectorAll(".decision input").forEach(x => { x.disabled = true; });
+      document.getElementById("fb").classList.remove("hide");
+      document.getElementById("next").textContent = "Continue";
+      saveLocal(ST);
+      return;
+    }
+    ST.practice.msFeedback = since();
+    saveLocal(ST); route();
+  };
 }
 
 /* ---------------------------------------------------------------- order */
@@ -248,17 +279,17 @@ function howItWorks(){
    analysis can see the order each respondent actually saw. */
 function caseOrder(){
   const ids = CASES.map(c => c.id), edges = caseEdges();
-  const seq = CONFIG.randomiseCaseOrder ? constrainedShuffle(ids, edges) : topoOrder(ids, edges);
+  const seq = CONFIG.randomiseCaseOrder ? constrainedShuffle(ids, edges) : fixedOrder(ids, edges);
   return seq.map(id => CASES.findIndex(c => c.id === id));
 }
-function cardOrderFor(c){
-  const keys = c.issues.map(i => i.k), edges = cardEdges(c);
-  return CONFIG.randomiseCardOrder ? constrainedShuffle(keys, edges) : topoOrder(keys, edges);
+function decisionOrderFor(c){
+  const keys = c.decisions.map(d => d.k), edges = cardEdges(c);
+  return CONFIG.randomiseDecisionOrder ? constrainedShuffle(keys, edges) : fixedOrder(keys, edges);
 }
 
 /* This respondent's sequence of cases. New records store case ids, so a
    later reordering of CASES cannot move a resumed respondent to another
-   case. Records saved before that store only positions in CASES. */
+   case. */
 function caseSequence(rec){
   return Array.isArray(rec.caseOrder) ? rec.caseOrder.map(caseById)
                                       : (rec.order || []).map(i => CASES[i]);
@@ -266,20 +297,19 @@ function caseSequence(rec){
 
 /* ------------------------------------------------------------------ route */
 function route(){
+  if(ST.msIntro == null) return howItWorks();
+  if(!ST.practice || ST.practice.msFeedback == null) return practice();
   const seq = caseSequence(ST);
   if(ST.at >= seq.length) return closing();
   const c = seq[ST.at];
   const rec = ST.cases[c.id] || (ST.cases[c.id] = {
-    pos: ST.at + 1, errA: 0, errC: 0,
-    cardOrder: cardOrderFor(c)
+    pos: ST.at + 1, errA: 0, errB: 0, decisionOrder: decisionOrderFor(c)
   });
-  if(!rec.seen)   return pageIntro(c, rec);
-  if(!rec.first)  return pageBoard(c, rec, "first");
-  if(!rec.menu)   return pageAdvisor(c, rec);
-  if(rec.menu === "edit_mine" && !rec.final) return pageBoard(c, rec, "final");
-  /* A completed final plan is the durable unit of progress. Save it to the
+  if(!rec.first) return pageFirst(c, rec);
+  if(!rec.final) return pageFinal(c, rec);
+  /* A completed caselet is the durable unit of progress. Save it to the
      server before advancing; the request runs in parallel with the next page. */
-  if(rec.final && !rec.serverCheckpointed){
+  if(!rec.serverCheckpointed){
     rec.serverCheckpointed = true;
     saveLocal(ST);
     checkpointResponse(ST, "case_" + c.id + "_complete");
@@ -287,301 +317,158 @@ function route(){
   ST.at++; saveLocal(ST); route();
 }
 
-/* a clean screen between situations, so no page carries two jobs */
-function pageIntro(c, rec){
-  setStep(`Situation ${ST.at+1} of ${CASES.length}`, 10 + ST.at*13);
-  paint(`
-   <p class="small muted">Situation ${ST.at+1} of ${CASES.length}</p>
-   <h1>${esc(c.name)}</h1>
-   <p class="serif lead">${esc(c.opening)}</p>
-   <p class="serif lead muted">Five things need attention at the same time. You will give each one a label.</p>
-   <button class="go" id="next">See the situation</button>`);
-  document.getElementById("next").onclick = () => {
-    rec.seen = true; rec.msIntro = since(); saveLocal(ST); route();
-  };
+/* ------------------------------------------------------------ the board */
+function situationHeader(c){
+  return `<header class="sit">
+     <div class="art">${(window.ART || {})[c.art] || ""}</div>
+     <div><p class="kicker">Situation ${ST.at+1} of ${CASES.length}</p>
+       <h2>${esc(c.name)}</h2>
+       <p class="when">${esc(c.when)}</p></div>
+   </header>
+   <p class="opening serif">${esc(c.opening)}</p>
+   <details class="help"><summary>What the four actions mean</summary>${definitionsHTML()}</details>`;
 }
 
-function header(c){
-  return `<p class="small muted">Situation ${ST.at+1} of ${CASES.length}</p>
-   <h2>${esc(c.name)}</h2>
-   <p class="situation serif">${esc(c.opening)}</p>`;
+/* one decision with its four actions. extra goes between the text and
+   the options (the first answer and the AI advice, on the final page). */
+function decisionCard(d, kicker, prefix, extra, legend){
+  return `<article class="decision" data-k="${esc(d.k)}">
+    <p class="kicker">${esc(kicker)}</p>
+    <h3>${esc(d.n)}</h3>
+    <p class="text serif">${esc(d.t)}</p>
+    ${extra || ""}
+    <fieldset class="acts"><legend class="${legend ? "lg" : "sr"}">${legend || "Your answer"}</legend>
+      ${ACTIONS.map(([a, n, gloss]) =>
+        `<label class="act" data-a="${a}"><input type="radio" name="${prefix}-${esc(d.k)}" value="${a}">
+          <span><b>${n}</b> — ${esc(gloss)}</span></label>`).join("")}
+    </fieldset>
+  </article>`;
 }
 
-/* people are stored as [key, name, "Title \u2014 remit"] */
-function person(p){
-  const bits = String(p[2]).split(" \u2014 ");
-  return {k:p[0], name:p[1], title:bits[0] || p[2], remit:bits.slice(1).join(" \u2014 ")};
-}
-
-/* the roster must be readable while choosing, not only inside the dropdown:
-   the case text never says who is good at what, so the respondent has to
-   join the two. */
-function rosterHTML(c){
-  return `<div class="roster"><h4>Your team</h4><ul>` + c.people.map(p => {
-    const q = person(p);
-    return `<li><b>${esc(q.name)}</b><span class="t">${esc(q.title)}</span><span class="r">${esc(q.remit)}</span></li>`;
-  }).join("") + `</ul></div>`;
-}
-
-/* the situation again, on the advisor screen */
-function recapHTML(c, rec){
-  const byKey = k => c.issues.find(i => i.k === k);
-  return `<div class="recap"><h4>The situation again</h4>
-    <div class="recap-grid">${rec.cardOrder.map(k => { const i = byKey(k);
-      return `<div class="rcard"><b>${esc(i.n)}</b><span>${esc(i.t)}</span></div>`; }).join("")}</div>
-    ${rosterHTML(c)}</div>`;
-}
-
-const LIKERT = ["Not sure at all","Not very sure","Fairly sure","Very sure","Completely sure"];
-function likertHTML(id, label){
-  return `<fieldset class="likert"><legend>${label}</legend>` + LIKERT.map((o,i) =>
-    `<label><input type="radio" name="${id}" value="${i+1}"><span>${esc(o)}</span></label>`).join("") + `</fieldset>`;
-}
-
-function issueCards(c, rec, prefix){
-  const byKey = k => c.issues.find(i => i.k === k);
-  return `<div class="board fade">` + rec.cardOrder.map(k => {
-    const is = byKey(k);
-    return `<article class="issue" data-i="${is.k}">
-      <h3 class="name">${esc(is.n)}</h3>
-      <p class="what">${esc(is.t)}</p>
-      <div class="chips">${labelSet().map(([lk,ln]) =>
-        `<button type="button" class="chip" data-l="${lk}">${ln}</button>`).join("")}</div>
-      <div class="who"><label for="${prefix}-${is.k}">Who handles it?</label>
-        <select id="${prefix}-${is.k}"><option value="">Choose a person</option>
-        ${c.people.map(p=>{const q=person(p);return `<option value="${q.k}">${esc(q.name)} — ${esc(q.title)}</option>`;}).join("")}</select></div>
-    </article>`;
-  }).join("") + `</div>`;
-}
-
-const meterHTML = () => `<div class="meter">` + labelSet().map(([k,n,q]) =>
-  `<span class="tally" data-k="${k}" data-n="${n}" data-q="${q}">${n} 0/${q}</span>`).join("") + `</div>`;
-
-/* L is {issueKey: {label, person}} */
-function wireBoard(c, L, onChange, onBlock){
-  const nameOf = k => (c.issues.find(i => i.k === k) || {}).n || k;
-  function repaint(){
-    app().querySelectorAll(".issue").forEach(box => {
-      const k = box.dataset.i, cur = L[k];
-      box.querySelectorAll(".chip").forEach(b =>
-        (cur && cur.label === b.dataset.l) ? b.setAttribute("data-on", b.dataset.l) : b.removeAttribute("data-on"));
-      const who = box.querySelector(".who");
-      if(cur && cur.label === "delegate") who.classList.add("show");
-      else { who.classList.remove("show"); box.querySelector("select").value = ""; if(cur) cur.person = null; }
-    });
-    const counts = {}; labelSet().forEach(([k]) => counts[k] = 0);
-    Object.values(L).forEach(v => counts[v.label]++);
-    app().querySelectorAll(".tally").forEach(t => {
-      const k = t.dataset.k, q = +t.dataset.q;
-      t.textContent = `${t.dataset.n} ${counts[k]}/${q}`;
-      t.classList.toggle("done", counts[k] === q);
-    });
-    onChange && onChange(L);
-  }
-  app().querySelectorAll(".issue").forEach(box => {
-    const k = box.dataset.i;
-    box.querySelectorAll(".chip").forEach(btn => {
-      btn.onclick = () => {
-        const lab = btn.dataset.l, cur = L[k];
-        if(cur && cur.label === lab){ delete L[k]; }
-        else {
-          let used = 0, holder = null;
-          for(const kk in L) if(kk !== k && L[kk].label === lab){ used++; holder = kk; }
-          if(used >= need(lab)){
-            const nm = labelSet().find(x => x[0] === lab)[1];
-            onBlock && onBlock(`${nm} is already on ${nameOf(holder)}. Take it off there first.`);
-            return;
-          }
-          L[k] = {label: lab, person: (cur && cur.person) || null};
-        }
-        repaint();
+/* keeps the selected style in step with the radios, and notes when each
+   decision was last answered (ms since the page opened) */
+function wireDecisions(prefix){
+  const times = {};
+  const t0 = Date.now();
+  app().querySelectorAll(".decision").forEach(box => {
+    box.querySelectorAll(`input[name^="${prefix}-"]`).forEach(inp => {
+      inp.onchange = () => {
+        box.querySelectorAll(".act").forEach(l => l.classList.toggle("on", l.querySelector("input").checked));
+        box.classList.remove("missing");
+        times[box.dataset.k] = Date.now() - t0;
       };
     });
-    box.querySelector("select").onchange = e => { if(L[k]) L[k].person = e.target.value || null; repaint(); };
   });
-  repaint();
-  return repaint;
+  return () => ({...times});
 }
-
-function problemWith(L){
-  const counts = {}; labelSet().forEach(([k]) => counts[k] = 0);
-  Object.values(L).forEach(v => counts[v.label]++);
-  for(const [k,n,q] of labelSet()){
-    if(counts[k] < q) return `Give ${q - counts[k]} more issue${q - counts[k] > 1 ? "s" : ""} the label ${n}.`;
-    if(counts[k] > q) return `${n} can be used on ${q} issue${q > 1 ? "s" : ""} only.`;
-  }
-  if(Object.values(L).some(v => v.label === "delegate" && !v.person)) return "Choose a person for each delegated issue.";
-  return null;
+function readDecisions(list, prefix){
+  const out = {};
+  list.forEach(d => {
+    const x = app().querySelector(`input[name="${prefix}-${d.k}"]:checked`);
+    out[d.k] = x ? x.value : null;
+  });
+  return out;
 }
-
-function toPlan(L){
-  const p = {own:null, del:{}, wait:null, hold:null, defer:[], holdPick:null};
-  for(const k in L){
-    const v = L[k];
-    if(v.label === "own") p.own = k;
-    else if(v.label === "wait") p.wait = k;
-    else if(v.label === "hold") p.hold = k;
-    else if(v.label === "defer") p.defer.push(k);
-    else if(v.label === "delegate") p.del[k] = v.person;
-  }
-  return p;
-}
-
-/* the extra question in merged mode -------------------------------------- */
-function holdQuestionHTML(){
-  return `<div id="holdq" class="card hide">
-    <h3 style="margin-top:0">One more question about the two you set aside</h3>
-    <p class="small muted">Is there one of them that nobody should act on until a fact is checked?</p>
-    <div class="opts" id="holdopts"></div></div>`;
-}
-function refreshHoldQuestion(c, L, pick, onPick){
-  const box = document.getElementById("holdq"); if(!box) return;
-  const two = Object.keys(L).filter(k => L[k].label === "defer");
-  if(two.length !== 2){ box.classList.add("hide"); return; }
-  box.classList.remove("hide");
-  const opts = document.getElementById("holdopts");
-  const nameOf = k => c.issues.find(i => i.k === k).n;
-  const rows = two.map(k => [k, nameOf(k)]).concat([["none","Neither — both are only waiting for time"]]);
-  opts.innerHTML = rows.map(([v,n]) =>
-    `<label${pick.v === v ? ' class="sel"' : ''}><input type="radio" name="hq" value="${v}"${pick.v === v ? " checked" : ""}>${esc(n)}</label>`).join("");
-  opts.querySelectorAll("label").forEach(l => l.onclick = () => {
-    opts.querySelectorAll("label").forEach(x => x.classList.remove("sel"));
-    l.classList.add("sel"); pick.v = l.querySelector("input").value; onPick && onPick();
+function setDecisions(plan, prefix){
+  Object.keys(plan || {}).forEach(k => {
+    const x = app().querySelector(`input[name="${prefix}-${k}"][value="${plan[k]}"]`);
+    if(x){ x.checked = true; x.closest(".act").classList.add("on"); }
   });
 }
+function requireAll(list, ans){
+  const missing = list.filter(d => !ans[d.k]);
+  app().querySelectorAll(".decision").forEach(b => b.classList.toggle("missing", missing.some(d => d.k === b.dataset.k)));
+  if(!missing.length) return true;
+  document.getElementById("e").textContent = missing.length === 1
+    ? `Choose an action for “${missing[0].n}”.`
+    : `Choose an action for each decision. ${missing.length} are still open.`;
+  const first = app().querySelector(".decision.missing");
+  if(first && first.scrollIntoView) first.scrollIntoView({behavior:"smooth", block:"center"});
+  return false;
+}
+const ordered = (c, rec) => rec.decisionOrder.map(k => c.decisions.find(d => d.k === k));
 
-/* board page: first plan or final plan ------------------------------------ */
-function pageBoard(c, rec, which){
-  const first = which === "first";
-  setStep(`Situation ${ST.at+1} of ${CASES.length}`, 10 + ST.at*13 + (first ? 0 : 6));
-  const merged = ST.deferMode === "merged";
-  const L = {}; const pick = {v:null};
-
-  let seed = null;
-  if(!first){
-    seed = rec.first;
-    L[seed.own] = {label:"own", person:null};
-    Object.keys(seed.del).forEach(i => L[i] = {label:"delegate", person:seed.del[i]});
-    if(merged){ (seed.defer || [seed.wait, seed.hold]).forEach(i => L[i] = {label:"defer", person:null});
-                pick.v = seed.holdPick || seed.hold || null; }
-    else { L[seed.wait] = {label:"wait", person:null}; L[seed.hold] = {label:"hold", person:null}; }
-  }
-
-  const rule = labelSet().map(([,n,q]) => `${q} ${n}`).join(", ");
-  paint(`${header(c)}
-   ${first ? "" : `<div class="plans">
-      <div class="plan"><h4>Your first plan</h4>${planRows(c, rec.first)}</div>
-      <div class="plan"><h4>AI advisor's plan</h4>${planRows(c, aiPlan(c, ST.version))}</div></div>`}
-   <h3>${first ? "Your first plan" : "Your final plan"}</h3>
-   <p class="small muted">${first
-      ? `Give each issue one label: ${rule}.`
-      : `Started from your first plan. Change whatever you want. Same rule: ${rule}.`}</p>
-   ${rosterHTML(c)}
-   ${issueCards(c, rec, first ? "a" : "c")}
-   ${merged ? holdQuestionHTML() : ""}
-   ${first ? likertHTML("conf", "How sure are you that this plan is close to the best plan for this situation?") : ""}
+/* first answers --------------------------------------------------------- */
+function pageFirst(c, rec){
+  setStep(`Situation ${ST.at+1} of ${CASES.length}`, 12 + ST.at*13);
+  const list = ordered(c, rec);
+  paint(`${situationHeader(c)}
+   <h3 class="part">Your first answers</h3>
+   <p class="small muted">Choose one action for each decision. You may choose the same action more than once.</p>
+   <div class="decisions fade">${list.map((d, i) => decisionCard(d, `Decision ${i+1} of ${list.length}`, "a")).join("")}</div>
    <p class="err" id="e"></p>
-   <button class="go" id="next">${first ? "Save my plan" : "Save final plan"}</button>
-   ${meterHTML()}`, true);
-
-  const repaint = wireBoard(c, L,
-    () => { document.getElementById("e").textContent = "";
-            if(merged) refreshHoldQuestion(c, L, pick); },
-    (m) => { rec[first ? "errA" : "errC"]++; document.getElementById("e").textContent = m; });
-
-  if(!first){ // restore the delegate names the seed plan carried
-    app().querySelectorAll(".issue").forEach(box => {
-      const k = box.dataset.i;
-      if(L[k] && L[k].label === "delegate"){
-        box.querySelector(".who").classList.add("show");
-        box.querySelector("select").value = L[k].person || "";
-      }
-    });
-  }
-  if(merged) refreshHoldQuestion(c, L, pick);
-
+   <button class="go" id="next">Save my answers</button>`);
+  const t = wireDecisions("a");
   document.getElementById("next").onclick = () => {
-    const p = problemWith(L);
-    if(p){ rec[first ? "errA" : "errC"]++; document.getElementById("e").textContent = p; return; }
-    if(merged && !pick.v){ document.getElementById("e").textContent = "Answer the question about the two you set aside."; return; }
-    const conf = first ? app().querySelector("input[name=conf]:checked") : null;
-    if(first && !conf){ document.getElementById("e").textContent = "Say how sure you are about this plan."; return; }
-    const plan = toPlan(L);
-    if(merged) plan.holdPick = pick.v === "none" ? null : pick.v;
-    if(first){ rec.first = plan; rec.conf1 = +conf.value; rec.msA = since(); }
-    else { rec.final = plan; rec.msC = since(); }
+    const ans = readDecisions(list, "a");
+    if(!requireAll(list, ans)){ rec.errA++; return; }
+    rec.first = ans; rec.msA = since(); rec.tA = t();
     saveLocal(ST);
-    /* the pre-AI plan feeds the ability score: save it before the advisor shows */
-    if(first) checkpointResponse(ST, "case_" + c.id + "_first_plan");
+    /* the pre-AI answers feed the ability score: save them before the advisor shows */
+    checkpointResponse(ST, "case_" + c.id + "_first_plan");
     route();
   };
 }
 
-function planRows(c, plan){
-  const nm = k => (c.issues.find(i => i.k === k) || {}).n || k;
-  const pn = k => { const p = c.people.find(p => p[0] === k); return p ? p[1] : k; };
-  const rows = [["own","Own", nm(plan.own)]];
-  Object.keys(plan.del).forEach(i => rows.push(["delegate","Delegate", `${nm(i)} → ${pn(plan.del[i])}`]));
-  if(ST.deferMode === "merged"){
-    (plan.defer || [plan.wait, plan.hold]).forEach(i => rows.push(["defer","Set aside", nm(i)]));
-    const h = plan.holdPick ?? plan.hold;
-    rows.push(["hold","Check first", h ? nm(h) : "Neither"]);
-  } else {
-    rows.push(["wait","Wait", nm(plan.wait)]);
-    rows.push(["hold","Hold", nm(plan.hold)]);
-  }
-  return rows.map(r => `<div class="prow" data-k="${r[0]}"><b>${r[1]}</b><span>${esc(r[2])}</span></div>`).join("");
+/* AI advice and final answers ------------------------------------------ */
+const LIKERT = ["Not sure at all","Not very sure","Fairly sure","Very sure","Completely sure"];
+function confidenceHTML(){
+  return `<fieldset class="scale">
+    <legend>How sure are you that your final answers are close to the best answers for this situation? <span class="muted">(optional)</span></legend>
+    <div class="seg">${LIKERT.map((o, i) =>
+      `<label><input type="radio" name="conf" value="${i+1}"><span>${esc(o)}</span></label>`).join("")}</div>
+  </fieldset>
+  <label class="reason" for="why">Why did you keep or change your answers? <span class="muted">(optional)</span></label>
+  <textarea id="why" maxlength="1000"></textarea>`;
 }
 
-/* advisor page ------------------------------------------------------------ */
-function pageAdvisor(c, rec){
-  setStep(`Situation ${ST.at+1} of ${CASES.length}`, 14 + ST.at*13);
-  const ai = aiPlan(c, ST.version);
-  /* what the advisor showed, kept with the answer, so the record stands
-     on its own if an AI plan is edited later. Set once. */
-  if(!rec.ai) rec.ai = {version:ST.version, good:aiIsGood(c, ST.version), mode:ST.deferMode,
-    plan:{own:ai.own, del:{...ai.del}, wait:ai.wait, hold:ai.hold, defer:[...ai.defer], holdPick:ai.holdPick},
-    why:ai.why};
-  paint(`${header(c)}
-   <p>Your first plan is saved and cannot be changed. An AI advisor looked at the same situation.</p>
-   ${recapHTML(c, rec)}
-   <div class="plans">
-     <div class="plan"><h4>Your first plan</h4>${planRows(c, rec.first)}</div>
-     <div class="plan"><h4>AI advisor's plan</h4>${planRows(c, ai)}
-       <div class="why">${esc(ai.why)}</div></div>
-   </div>
-   <h3>What do you want your final plan to be?</h3>
-   <div class="opts" id="opts">
-     <label><input type="radio" name="m" value="keep">Keep my first plan</label>
-     <label><input type="radio" name="m" value="use_ai">Use the AI's plan</label>
-     <label><input type="radio" name="m" value="edit_mine">Edit my first plan</label>
-   </div>
+function pageFinal(c, rec){
+  setStep(`Situation ${ST.at+1} of ${CASES.length}`, 18 + ST.at*13);
+  const list = ordered(c, rec);
+  const level = ST.aiLevels[c.id];
+  const ai = aiPlan(c, level);
+  /* what the advisor showed, kept with the answers, so the record stands
+     on its own if the advice is edited later. Set once. */
+  if(!rec.ai) rec.ai = {condition: ST.aiCondition, level, actions: ai.actions, why: ai.why,
+                        score: aiPlanScore(c, level)};
+  const shown = rec.ai;
+  paint(`${situationHeader(c)}
+   <h3 class="part">AI advice and your final answers</h3>
+   <p class="small muted">Your first answers are saved and cannot be changed. An AI advisor looked at the same five decisions; its recommendation is under each one. Your first answers are selected below. Change any you want.</p>
+   <div class="decisions fade">${list.map((d, i) => decisionCard(d, `Decision ${i+1} of ${list.length}`, "b",
+     `<div class="compare">
+        <div class="mine"><span class="tag">Your first answer</span><b data-a="${rec.first[d.k]}">${actionLabel(rec.first[d.k])}</b></div>
+        <div class="advice"><span class="tag">AI advisor</span><b data-a="${shown.actions[d.k]}">${actionLabel(shown.actions[d.k])}</b>
+          <p class="serif">${esc(shown.why[d.k])}</p></div>
+      </div>`, "Your final answer")).join("")}</div>
+   ${confidenceHTML()}
    <p class="err" id="e"></p>
-   <button class="go" id="next">Continue</button>`, true);
-  app().querySelectorAll(".opts label").forEach(l => l.onclick = () => {
-    app().querySelectorAll(".opts label").forEach(x => x.classList.remove("sel")); l.classList.add("sel");
-  });
+   <button class="go" id="next">Save my final answers</button>`);
+  const t = wireDecisions("b");
+  setDecisions(rec.first, "b");
+  app().querySelectorAll(".seg input").forEach(x => x.onchange = () =>
+    app().querySelectorAll(".seg label").forEach(l => l.classList.toggle("on", l.querySelector("input").checked)));
   document.getElementById("next").onclick = () => {
-    const v = app().querySelector("input[name=m]:checked");
-    if(!v){ document.getElementById("e").textContent = "Choose one."; return; }
-    rec.menu = v.value; rec.msB = since();
-    if(v.value === "keep") rec.final = rec.first;
-    if(v.value === "use_ai") rec.final = {own:ai.own, del:{...ai.del}, wait:ai.wait, hold:ai.hold,
-                                          defer:[...ai.defer], holdPick:ai.holdPick};
+    const ans = readDecisions(list, "b");
+    if(!requireAll(list, ans)){ rec.errB++; return; }
+    const conf = app().querySelector("input[name=conf]:checked");
+    rec.final = ans; rec.msB = since(); rec.tB = t();
+    rec.conf = conf ? +conf.value : null;
+    rec.reason = document.getElementById("why").value.trim();
     saveLocal(ST); route();
   };
 }
 
 /* closing ----------------------------------------------------------------- */
 function closing(){
-  setStep("Last few questions", 90);
+  setStep("Last few questions", 92);
   const sel = (id,label,opts) => `<h3>${label}</h3><select id="${id}"><option value="">Choose one</option>${opts.map(o=>`<option>${o}</option>`).join("")}</select>`;
   paint(`
    <h2>Last few questions</h2>
    <div class="card">
      ${sel("e1","While answering, did you use ChatGPT or another AI tool, or ask anyone for help?",["No","Yes, for some situations","Yes, for most situations"])}
      <p class="small muted" style="margin:.3rem 0 0">Your answer changes nothing for you.</p>
-     ${sel("e2","Overall, how did the AI advisor's plans compare with yours?",["Mostly better","About the same","Mostly worse","Some better, some worse"])}
+     ${sel("e2","Overall, how did the AI advisor's recommendations compare with yours?",["Mostly better","About the same","Mostly worse","Some better, some worse"])}
      <h3>In one line, what do you think this study is testing?</h3>
      <textarea id="e3"></textarea>
      <h3>Your CAT overall percentile (optional)</h3>
@@ -592,12 +479,10 @@ function closing(){
    <h2 style="margin-top:1.8rem">Help us fix the survey</h2>
    <div class="card">
      ${sel("f1","Which situation was hardest to decide?", CASES.map(c=>c.name).concat(["None stood out"]))}
-     ${ST.deferMode === "merged"
-       ? sel("f2","Was the question about setting issues aside clear?",["Clear","Somewhat clear","Not clear"])
-       : sel("f2","Was the difference between Wait and Hold clear?",["Clear","Somewhat clear","Not clear"])}
-     <h3>Did any situation seem to have an obvious answer? Which one, and what gave it away?</h3>
+     ${sel("f2","Was the difference between Wait and Hold clear?",["Clear","Somewhat clear","Not clear"])}
+     <h3>Did any decision seem to have an obvious answer? Which one, and what gave it away?</h3>
      <textarea id="f3"></textarea>
-     <h3>Did the one-label rule stop you from doing what you would really do? Where?</h3>
+     <h3>Was any decision hard to fit into the four actions? Which one?</h3>
      <textarea id="f4"></textarea>
      ${sel("f5","How did the length feel?",["Too long","About right","Too short"])}
      <h3>Anything else we should change?</h3>
@@ -612,7 +497,7 @@ function closing(){
     if(CONFIG.contactAt === "end"){ readContact(); ST.contact = window.__contact || null; }
     ST.end = {aiHelp:g("e1"), compare:g("e2"), guess:g("e3"), cat: g("e4") ? +g("e4") : null};
     if(CONFIG.showPilotQuestions)
-      ST.pilot = {hardest:g("f1"), waitHold:g("f2"), obvious:g("f3"), ruleBind:g("f4"), length:g("f5"), other:g("f6")};
+      ST.pilot = {hardest:g("f1"), waitHold:g("f2"), obvious:g("f3"), hardToFit:g("f4"), length:g("f5"), other:g("f6")};
     ST.msEnd = since(); ST.finished = new Date().toISOString(); ST.done = true;
     ST.totalMin = Math.round(((new Date(ST.finished) - new Date(ST.started))/60000)*10)/10;
     saveLocal(ST);

@@ -1,94 +1,66 @@
 /* node make-docs.js — writes docs/instrument.md from cases.js + key.js, so the
-   documentation cannot drift from what respondents actually see. */
+   documentation cannot drift from what respondents actually see. Scores come
+   from scoring.js itself, not from a copy of its rules. */
 const fs = require("fs"), vm = require("vm");
-const box = {window:{}, console}; box.window = box; vm.createContext(box);
-["js/config.js","js/cases.js","js/key.js","js/order.js"].forEach(f =>
+const box = {window:{}, console, document:{createElement:()=>({}), body:{insertBefore(){}}}};
+box.window = box; vm.createContext(box);
+["js/config.js","js/cases.js","js/key.js","js/order.js","js/scoring.js"].forEach(f =>
   vm.runInContext(fs.readFileSync(f,"utf8"), box, {filename:f}));
-const {CASES, KEY, cardEdges, caseEdges} = box;
-
-const person = p => { const b = String(p[2]).split(" \u2014 ");
-  return {k:p[0], name:p[1], title:b[0], remit:b.slice(1).join(" \u2014 ")}; };
-
-function score(id, p, mode){
-  const K = KEY[id], own = K.own[p.own] ?? 0;
-  const ks = Object.keys(p.del);
-  const del = ks.reduce((s,i)=> s + (K.del[i][p.del[i]] ?? 0), 0) / ks.length;
-  if(mode === "merged"){
-    const [a,b] = p.defer || [p.wait, p.hold];
-    const set = Math.max(((K.wait[a]??0)+(K.hold[b]??0))/2, ((K.wait[b]??0)+(K.hold[a]??0))/2);
-    return {own, del, set, total:(own+del+set)/3};
-  }
-  return {own, del, wait:K.wait[p.wait]??0, hold:K.hold[p.hold]??0,
-          total:(own+del+(K.wait[p.wait]??0)+(K.hold[p.hold]??0))/4};
-}
-const nm = (c,k) => (c.issues.find(i=>i.k===k)||{}).n || k;
-const pn = (c,k) => { const p = c.people.find(x=>x[0]===k); return p ? p[1] : k; };
-const planLine = (c,p) => [`Own ${nm(c,p.own)}`]
-  .concat(Object.keys(p.del).map(i=>`Delegate ${nm(c,i)} to ${pn(c,p.del[i])}`))
-  .concat([`Wait ${nm(c,p.wait)}`, `Hold ${nm(c,p.hold)}`]).join("; ");
+const run = s => vm.runInContext(s, box);
+const {CASES, KEY, ACTIONS, INSTRUCTIONS, PRACTICE, CONFIG} = box;
+const LEVELS = run("AI_LEVELS"), LEVEL_NAME = {high:"High", moderate:"Moderate", low:"Low", very_low:"Very low"};
+const label = a => (ACTIONS.find(x => x[0] === a) || [a, a])[1];
+const meta = run("instrumentMeta()");
 
 let L = [];
 L.push("# Instrument\n");
-L.push("Generated from `js/cases.js` and `js/key.js`. Do not edit by hand; run `node make-docs.js`.\n");
+L.push("Generated from `js/cases.js`, `js/key.js` and `js/scoring.js`. Do not edit by hand; run `node make-docs.js`.\n");
+L.push(`Instrument version \`${meta.instrumentVersion}\`, cases \`${meta.casesHash}\`, key \`${meta.keyHash}\`, scoring v${meta.scoringVersion}.\n`);
 
-L.push("## Order in which respondents see things\n");
-L.push("Case order is randomised per respondent. The six situations are six different organisations with different people, different days and no shared timeline, so no case has to follow another and all 720 case orders can occur.\n");
-L.push("Card order inside a case is randomised too, except where one card only reads correctly after another. Those pairs are declared in `cases.js` as `after:[...]`, enforced by `order.js`, and checked at load.\n");
-L.push("| Case | Must precede | Why | Orders still possible |");
-L.push("| --- | --- | --- | --- |");
-const WHY = {"4:complaint>warning":"The warning card says \"that agent\" and \"the client's account\". Both are introduced by the complaint card.",
-             "5:drop>diagnosis":"The data card says \"the drop\", \"the rival fest\" and \"the coordinator's exit\". All three are introduced by the registrations card.",
-             "5:drop>coordinator":"The coordinator card says \"that campus\". The campus is introduced by the registrations card."};
-CASES.forEach(c => {
-  const e = cardEdges(c);
-  if(!e.length){ L.push(`| ${c.id} ${c.name} | none | five things on one desk at one time | 120 of 120 |`); return; }
-  const n = e.length === 1 ? 60 : 40;
-  e.forEach((pair,i) => L.push(`| ${i?"":c.id+" "+c.name} | ${pair[0]} before ${pair[1]} | ${WHY[c.id+":"+pair[0]+">"+pair[1]]||""} | ${i?"":n+" of 120"} |`));
-});
-L.push("\nThe recap before the AI advice, and the board on the final-plan screen, both replay the order that respondent was given. Nothing is reshuffled between screens.\n");
+L.push("## Instructions respondents read\n");
+L.push(INSTRUCTIONS + "\n");
+L.push("| Action | Shown on each option | Definition |");
+L.push("| --- | --- | --- |");
+ACTIONS.forEach(([, n, gloss, def]) => L.push(`| ${n} | ${gloss} | ${def} |`));
+L.push("");
 
-L.push("## AI advice: what is shown, and what it is worth\n");
-L.push("Each respondent sees version A or B, decided by a coin flip at the start and held for all six cases. Every respondent therefore gets three good plans and three weak ones. The version is never shown, and no accuracy figure is ever shown to the respondent.\n");
-L.push("**Accuracy of an AI plan** is that plan's own score under the researcher key, on the same 0-100 scale as a respondent's plan. It is a property of the advice, not a probability. Use the number itself as AIQuality in the regression rather than a good/weak dummy: the weak plans are not equally weak, and the continuous version makes the interaction interpretable per point of advice quality.\n");
-L.push("| Case | Version | Arm | Accuracy, split | Accuracy, merged |");
-L.push("| --- | --- | --- | --- | --- |");
-CASES.forEach(c => ["A","B"].forEach(v => {
-  const good = c.goodVersion === v;
-  L.push(`| ${c.id} ${c.name} | ${v} | ${good?"good":"weak"} | ${score(c.id,c.ai[v],"split").total.toFixed(1)} | ${score(c.id,c.ai[v],"merged").total.toFixed(1)} |`);
-}));
+L.push("## Practice question (Wait versus Hold, not scored)\n");
+PRACTICE.items.forEach(i => L.push(`- **${i.n}** (expected: ${label(i.answer)}). ${i.t}`));
+L.push(`\nFeedback shown after answering: ${PRACTICE.feedback}\n`);
+
+L.push("## Order and AI advice assignment\n");
+L.push(`Caselet order is ${CONFIG.randomiseCaseOrder ? "randomised per respondent" : "fixed"}. Decision order inside a caselet is ${CONFIG.randomiseDecisionOrder ? "randomised per respondent" : "fixed, as numbered below"}. Both orders are stored on every response.\n`);
+L.push(`Each respondent is given one of ${CONFIG.aiConditions} AI conditions at random. The condition rotates the four advice levels across the caselets, so every respondent sees every level, and across the conditions every caselet appears at every level once. Levels and scores are never shown to respondents.\n`);
+L.push("| Caselet | " + [...Array(CONFIG.aiConditions).keys()].map(i => `Condition ${i}`).join(" | ") + " |");
+L.push("| --- |" + " --- |".repeat(CONFIG.aiConditions));
+const assign = [...Array(CONFIG.aiConditions).keys()].map(i => run(`aiAssignment(${i})`));
+CASES.forEach(c => L.push(`| ${c.name} | ` + assign.map(a => LEVEL_NAME[a[c.id]]).join(" | ") + " |"));
+L.push("");
+
+L.push("## Scoring\n");
+L.push("Every decision scores all four actions from 0 to 20; each decision has exactly one 20, its preferred action. A caselet score is the sum of its five decision scores, 0 to 100, for the first answers, the final answers and the AI advice alike.\n");
+L.push("| Caselet | " + LEVELS.map(l => LEVEL_NAME[l] + " advice").join(" | ") + " |");
+L.push("| --- |" + " --- |".repeat(LEVELS.length));
+CASES.forEach(c => L.push(`| ${c.name} | ` + LEVELS.map(l => run(`aiPlanScore(caseById(${c.id}), "${l}")`)).join(" | ") + " |"));
 L.push("");
 
 CASES.forEach(c => {
-  L.push(`## Case ${c.id} — ${c.name}\n`);
+  L.push(`## ${c.name} (case ${c.id})\n`);
+  L.push(`*${c.when}*\n`);
   L.push(`${c.opening}\n`);
-  const ce = cardEdges(c);
-  if(ce.length) L.push(`Card order constraint: ${ce.map(p=>p[0]+" before "+p[1]).join("; ")}.\n`);
-  L.push("| Issue | What the respondent reads |");
-  L.push("| --- | --- |");
-  c.issues.forEach(i => L.push(`| **${i.n}** | ${i.t} |`));
-  L.push("\n**Your team**\n");
-  L.push("| Person | Title | Remit |");
-  L.push("| --- | --- | --- |");
-  c.people.forEach(p => { const q = person(p); L.push(`| ${q.name} | ${q.title} | ${q.remit} |`); });
-
-  L.push("\n**AI advisor text**\n");
-  ["A","B"].forEach(v => {
-    const a = c.ai[v], good = c.goodVersion === v, s = score(c.id, a, "split");
-    L.push(`*Version ${v} — ${good?"good":"weak"} — accuracy ${s.total.toFixed(1)}*\n`);
-    L.push(`> ${a.why}\n`);
-    L.push(`Plan: ${planLine(c,a)}.`);
-    L.push(`Component scores: own ${s.own}, delegate ${s.del}, wait ${s.wait}, hold ${s.hold}.\n`);
+  c.decisions.forEach((d, i) => L.push(`${i+1}. **${d.n}** (\`${d.k}\`). ${d.t}`));
+  L.push("\n**Key**\n");
+  L.push("| Decision | Own | Delegate | Wait | Hold | Preferred |");
+  L.push("| --- | --- | --- | --- | --- | --- |");
+  c.decisions.forEach(d => { const K = KEY[c.id][d.k];
+    L.push(`| ${d.n} | ${K.own} | ${K.delegate} | ${K.wait} | ${K.hold} | ${label(run(`preferredAction(${c.id}, "${d.k}")`))} |`); });
+  L.push("\n**AI advice**\n");
+  LEVELS.forEach(l => {
+    const s = run(`scorePlan(${c.id}, aiPlan(caseById(${c.id}), "${l}").actions)`);
+    L.push(`*${LEVEL_NAME[l]}: ${s.total}/100, ${s.matches} of 5 preferred*\n`);
+    c.decisions.forEach((d, i) => L.push(`${i+1}. ${d.n}: **${label(c.ai[l][d.k][0])}**. ${c.ai[l][d.k][1]}`));
+    L.push("");
   });
-
-  L.push("**Key**\n");
-  L.push("| Issue | Own | Wait | Hold | " + c.people.map(p=>person(p).name).join(" | ") + " |");
-  L.push("| --- |" + " --- |".repeat(3 + c.people.length));
-  c.issues.forEach(i => {
-    const K = KEY[c.id];
-    L.push(`| ${i.n} | ${K.own[i.k]} | ${K.wait[i.k]} | ${K.hold[i.k]} | ` +
-      c.people.map(p => K.del[i.k][p[0]]).join(" | ") + " |");
-  });
-  L.push("");
 });
 
 fs.mkdirSync("docs", {recursive:true});

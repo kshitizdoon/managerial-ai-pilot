@@ -1,9 +1,15 @@
-# Managerial in-basket pilot
+# Managerial Decision Survey
 
-Six managerial situations, each with five competing issues. Respondents
-allocate their attention, see an AI advisor's plan for the same situation,
-then submit a final plan. Half the AI plans are good and half are weak, so
-the study can ask whether ability shows up in how people use AI advice.
+Six managerial situations ("caselets"), each with five decisions. For every
+decision the respondent picks one of four actions: Own, Delegate, Wait or
+Hold. They then see an AI advisor's recommendation for the same five
+decisions and give final answers. The advice comes at four quality levels,
+so the study can ask whether ability shows up in how people use AI advice.
+
+The instrument follows the researcher manual of 8 October 2026
+(*Managerial_Decision_Survey_Manual_v3_round2*, tracked changes accepted).
+It does not use the fixed action quotas or named delegates of the earlier
+pilot, and the manual says not to pool the two without a bridging analysis.
 
 Plain HTML, CSS and JavaScript. No build step, no framework.
 
@@ -13,18 +19,19 @@ Plain HTML, CSS and JavaScript. No build step, no framework.
 
 | File | What it holds |
 | --- | --- |
-| `js/config.js` | The knobs: deferral mode, scoring defaults, randomisation. Start here. |
-| `js/cases.js` | Everything respondents read: situations, issues, delegate rosters, both AI plans. |
-| `js/key.js` | The scoring key. Not shown to anyone. |
-| `js/order.js` | Constrained randomisation: shuffles cases and cards, keeps declared `after` constraints, and validates them. |
-| `js/scoring.js` | Turns a plan into scores. Both deferral modes. |
+| `js/config.js` | The knobs: AI conditions, randomisation, contact details, instrument version. Start here. |
+| `js/cases.js` | Everything respondents read: instructions, the four actions, the practice item, caselets, decisions, AI advice at four levels. |
+| `js/art.js` | One small illustration per caselet, for its header. |
+| `js/key.js` | The scoring key: 0 to 20 for each action on each decision. Not shown to anyone. |
+| `js/order.js` | Constrained randomisation: shuffles caselets (and decisions, if switched on), keeps declared `after` constraints, and validates them. |
+| `js/scoring.js` | Scores answers and advice, assigns advice levels, checks the key at load. |
 | `js/stats.js` | Alpha, correlations, power arithmetic. |
 | `js/storage.js` | Where responses go. |
 | `js/survey.js` | The respondent's side. |
 | `js/dashboard.js` | The results view. |
-| `css/styles.css` | All styling, with the rules that keep the cards neutral. |
+| `css/styles.css` | All styling, with the rules that keep the decision cards neutral. |
 | `netlify/functions/responses.mjs` | Stores and returns responses. |
-| `make-docs.js` | `node make-docs.js` regenerates `docs/instrument.md` from the cases and the key. |
+| `make-docs.js` | `node make-docs.js` regenerates `docs/instrument.md` from the cases, the key and the scoring. |
 | `build.py` | Optional. Bundles everything into `dist/index.html` for a single-file copy. |
 | `tests/` | Regression tests. `npm install`, then `npm test`. |
 
@@ -128,30 +135,27 @@ push.
 
 ## Check before you send the link out
 
-- Open the site, press **Start**, and finish one case. Open the browser
-  console: the page checks the key against the cases at load and prints
-  anything missing or any AI plan whose good and weak versions are too
-  close together.
+- Open the site, press **Start**, and finish one caselet. Open the browser
+  console: the page checks the key and the advice against the cases at
+  load, and a red band appears at the top if anything is wrong.
+- Add `?ai=0` to `?ai=3` to the link to see a given AI condition.
 - Complete a full run yourself, then open the results view and confirm your
   own response appears.
 - Send the link to one person on another network before sending it to ten.
 
 ## Editing
 
-**Wording, issues, rosters, AI plans** → `js/cases.js`. Keep the five issue
-texts close in length; the cards are one size and equal length keeps them
-balanced. Context pills may only repeat facts from the opening line.
+**Wording, decisions, AI advice** → `js/cases.js`. The text there is
+copied from the manual, and `tests/scoring.test.mjs` checks it against
+`tests/fixtures/manual-2026-10-08.json` word for word. Change the manual,
+the fixture and `cases.js` together.
 
-**Scores** → `js/key.js`. Every issue needs an `own`, `wait`, `hold` and
-`del` entry. The page warns in the console if one is missing.
+**Scores** → `js/key.js`. Every decision needs all four actions scored 0 to
+20, with exactly one 20. The page refuses to stay quiet otherwise, and also
+if a caselet prefers Own on more than two decisions or its advice does not
+get weaker level by level.
 
-**Rosters** → the third field of each person is `Title — remit`, split on
-the em dash. The dropdown shows the name and title; the roster panel above
-the board shows the remit. Keep the em dash or the split fails.
-
-**How the deferral question is asked** → `deferMode` in `js/config.js`, or
-add `?defer=merged` to the link for one participant. The mode used is
-stored with every response, so you can field both in one pilot.
+**AI conditions** → `aiConditions` in `js/config.js`. See *The design*.
 
 **Name and mobile** → `contactAt` in `js/config.js`: `"end"` (default),
 `"start"` or `"off"`. The default is the last screen. A managerial
@@ -161,169 +165,62 @@ in the outcome you are measuring.
 
 ---
 
-## What order respondents see things in
+## The design
 
-Case order is randomised. The six situations are six different
-organisations with different people, different days and no shared
-timeline, so no case has to follow another and all 720 orders can occur.
+**Flow.** Welcome and consent, About you, how it works (the manual's
+instructions and the four definitions), one practice question on Wait
+versus Hold (not scored; the answer and whether it matched are kept), then
+for each caselet: the context and five first answers; then the AI advice
+under each decision, the five final answers (the first answers start
+selected) and an optional confidence rating and reason. Last questions and
+the debrief close it.
 
-Card order inside a case is randomised too, except where one card only
-reads correctly after another. Three pairs are declared, all of them
-anaphora: a card that says "that agent", "the drop" or "that campus" is
-unreadable before the card that introduces the agent, the drop or the
-campus.
+**Order.** Caselet order is randomised per respondent. Decisions inside a
+caselet keep the manual's numbering (`randomiseDecisionOrder: false`). Both
+orders are stored on every response. Declare a constraint with
+`after:["otherKey"]` on a decision, or `CASE_AFTER = {laterId:[earlierId]}`
+for caselets; `order.js` enforces it and `checkOrderRules()` reports any
+that name something missing or form a loop.
 
-| Case | Constraint | Orders still possible |
+**AI advice.** Each respondent gets one of four conditions at random. The
+condition rotates the levels across the caselets: caselet *i* in `cases.js`
+order gets level (*i* + condition) mod 4. So every respondent sees all four
+levels (two of them twice) and, across the four conditions, every caselet
+appears at every level once. The level, the advice shown and its score are
+stored with each caselet's answers. Levels and scores are never shown.
+
+| Level | Advice score | Preferred actions |
 | --- | --- | --- |
-| 4 Friday support team | complaint before warning | 60 of 120 |
-| 5 Fest week | drop before diagnosis, drop before coordinator | 40 of 120 |
-| all others | none | 120 of 120 |
+| High | 94 | 4 of 5 |
+| Moderate | 74 | 3 of 5 |
+| Low | 48 | 2 of 5 |
+| Very low | 22 | 0 of 5 |
 
-Declare a constraint by adding `after:["otherKey"]` to an issue in
-`cases.js`, or `CASE_AFTER = {laterId:[earlierId]}` for whole cases.
-`order.js` enforces it, the shuffle stays uniform over the orders that
-satisfy it, and `checkOrderRules()` refuses to stay quiet if a constraint
-names something that does not exist or forms a loop: the console gets an
-error and a red band appears at the top of the page.
+**Scoring.** Each action on each decision scores 0 to 20; the preferred
+action scores 20. A caselet score is the sum of its five decisions, 0 to
+100, for first answers, final answers and advice alike. AI gain is final
+minus first. The ability score is the mean first-answer caselet score; the
+CSV also carries the leave-one-caselet-out version.
 
-The order each respondent got is stored on their response, and both the
-recap before the AI advice and the final-plan board replay that same
-order. Nothing is reshuffled between screens.
-
-## How a case is built
-
-Six rules keep the six cases consistent. They are in the header of
-`cases.js`, and the load-time check enforces what a machine can check.
-
-1. **One situation line.** Time, your role, and the one horizon fact the
-   key depends on. No pill strip, no second box.
-2. **Two sources.** No card states both a fact and what it implies. What
-   happened is on the card; who is good at what is in the roster. The
-   respondent has to join the two. This is the rule that removes the
-   giveaways without removing the answer.
-3. **Every card says three things:** what happened, what is being asked of
-   you now, and the constraint — a deadline, a cost of delay, or a fact
-   nobody has yet. The task is clear. The priority is not.
-4. **The roster is four of your own people**, each a title plus a one-line
-   remit, and every person has to plausibly fit at least two issues. No
-   clients, no outsiders, no track records.
-5. **No label words on cards.** Never "urgent", "can wait", "delegate",
-   "check first", "handle yourself".
-6. **Equal weight.** Every card runs 18 to 40 words. One clearly
-   low-stakes issue per case is deliberate: without it the allocation rule
-   has no slack and the key gets noisy.
-
-### Why the board looks the way it does
-
-| Requirement | How the build meets it |
-| --- | --- |
-| Preserve every fact in the key | Issue text is the only place case facts live, and the key scores nothing that is not written on a card or in the roster. |
-| Add nothing | No computed tags, risk levels, countdowns or icons. |
-| Keep the uncertainty | Sentences such as "whether those units meet specification will not be known until the batch records are pulled" stay intact and unmarked. |
-| No highlight on the right issue | One card style: same border, background, padding, type size and heading weight. Cards stretch to a common height. |
-| No red-means-danger | Colour never attaches to an issue. The four hues belong to the respondent's own labels, and none is red or green. |
-| Animation implies no priority | One fade, all five cards at once, 220 ms, no stagger. `prefers-reduced-motion` turns it off. |
-| No ordering cue | Card order is shuffled per respondent and recorded. |
-| Good and weak AI plans look identical | Same layout, same row order, same type, same length of reason text. |
-
-What the design removes is the table-to-form mapping: the choice sits on
-the card that states the issue, the roster sits above the board, and the
-allocation counter is always visible.
-
----
+**What respondents never see.** The key, the preferred action, the advice
+level and its score. The caselet illustration belongs to the caselet, uses
+none of the action colours, and says nothing about any decision.
 
 ## Documentation
 
-`node make-docs.js` writes `docs/instrument.md` from `cases.js` and
-`key.js`: every case as respondents read it, every roster, both AI plans
-with their text, and the full key with all four delegate scores per issue.
-Regenerate it after any edit so the write-up cannot drift from the
-instrument.
-
-**Accuracy of an AI plan** is that plan's own score under the key, on the
-same 0-100 scale as a respondent's plan. It is a property of the advice,
-not a probability, and it is never shown to respondents. Use the number as
-AIQuality rather than a good/weak dummy: the weak plans are not equally
-weak, and the continuous version makes the interaction readable per point
-of advice quality.
+`node make-docs.js` writes `docs/instrument.md` from `cases.js`, `key.js`
+and `scoring.js`: the instructions, the practice item, the condition table,
+every caselet and decision as respondents read them, the key, and all four
+levels of advice with their scores. Regenerate it after any edit; a test
+fails if it is stale.
 
 ---
-
-## Two things the pilot data should settle
-
-### Wait versus Hold
-
-The five issues are a permutation: once Own and the two delegations are
-set, the last two issues are forced, and the only remaining decision is
-which of them is Wait and which is Hold. That single binary choice is worth
-a lot under the current key. Holding Own and the delegations fixed and
-flipping only that split moves the case score by:
-
-| Case | Mean swing | Largest swing |
-| --- | --- | --- |
-| Launch morning | 21.8 | 47.5 |
-| Strong employee | 19.3 | 40.0 |
-| Monday project team | 15.8 | 31.3 |
-| Friday support team | 23.3 | 45.0 |
-| Fest week | 22.8 | 40.0 |
-| Day before travel | 13.5 | 30.0 |
-
-Across all 960 valid plans per case, the Wait and Hold parts carry 57 to
-70 per cent of the variance in the case score, against 30 to 43 per cent
-for Own and Delegate together. Listing all four people on every issue
-raised the delegate part's spread from almost nothing to an SD of 19 to 24
-points, which is why Own and Delegate now hold a third rather than a
-quarter. It did not fix the imbalance: Wait and Hold are two of the four
-components and each spans the full 0 to 100 range. If respondents cannot
-tell the two labels apart, a coin toss is still driving most of your
-ability measure.
-
-The results view reports how often the split matched the key. Below about
-two thirds, treat the distinction as unreliable and switch
-`deferMode` to `"merged"`: the respondent sets two issues aside, and a
-single follow-up question asks which of the two, if either, nobody should
-act on until a fact is checked. The case score then becomes
-`(Own + Delegate + which two were set aside) / 3`, and the hold judgement is
-scored separately instead of silently carrying a fifth of the score.
-
-Two consequences of that switch, both handled in the code:
-
-- Every weak AI plan now sets aside at least one issue that should not be
-  set aside, so the manipulation survives merged scoring. The narrowest
-  gap is 20 points (Strong employee) against 31 to 57 under split scoring.
-  The load-time check still warns if any case's two plans fall within 15
-  points in the mode you are fielding.
-- Merged scoring changes what the case score means, so do not mix the two
-  modes inside one analysis. The mode is stored on every response.
-
-### Do you need two delegations?
-
-Keep two: the allocation is what makes the task triage rather than a
-ranking. The free-points problem is fixed in the key — every issue now
-carries a score for all four people, so choosing a defensible alternative
-costs points instead of falling off a cliff, and `unlistedDelegateScore`
-only applies if you add a person and forget to key them.
-
-What is left to check is whether the person choice measures anything.
-
-Two things to decide from the pilot:
-
-- The results view shows the SD of the delegate component per case and the
-  alpha of a case score built without it. If dropping it barely moves
-  alpha, the delegate points are noise dressed as measurement, and the
-  person choice should be treated as a separate task-fit variable rather
-  than a quarter of the case score.
-- If almost nobody picks an unlisted person, raise
-  `unlistedDelegateScore` to something like 40 so a defensible alternative
-  is not scored as a catastrophe, or extend the key in `key.js` to list all
-  four people for every issue. The second is better and is the reason the
-  key is in its own file.
 
 ## How responses are saved
 
 Every response is saved to the Netlify function (Netlify Blobs) as a full
-copy at these points: after About you, after each first plan (before the AI
-advisor appears), after each final plan, and at Finish. One Blob per PID,
+copy at these points: after About you, after each caselet's first answers
+(before the AI advisor appears), after its final answers, and at Finish. One Blob per PID,
 so repeat saves never create duplicate respondents.
 
 - **Retries.** Each save is tried three times. A later save carries the
@@ -340,8 +237,12 @@ so repeat saves never create duplicate respondents.
 - **Browser backup.** `localStorage` holds the current response so a reload
   resumes it.
 - **Marked finished, but incomplete.** A record that says it is finished
-  but lacks a first or final plan for any situation is listed in its own
+  but lacks a first or final answer for any decision is listed in its own
   table on the results view and left out of all statistics.
+- **Earlier versions of the survey.** Records saved by the earlier pilot
+  (quotas, named delegates) are kept, listed in their own table and in the
+  raw download, and never scored. An unfinished one found on a device is
+  sent to the server once more, archived, and a fresh response starts.
 - **Instrument version.** Every new response carries `instrument`: the
   `instrumentVersion` name from `js/config.js`, `scoringVersion`,
   fingerprints of `cases.js` and `key.js`, and the scoring settings. It is
@@ -349,10 +250,10 @@ so repeat saves never create duplicate respondents.
   `instrumentVersion` whenever you edit the cases, key or scoring. The
   results view scores every record with what is deployed now and lists
   which versions the records came from. Records saved before this field
-  existed show as "not recorded". New responses also store `caseOrder` as
-  case ids (not positions) and, per case, the AI plan that was shown (`ai`).
+  existed show as "not recorded". Responses store `caseOrder` as case ids
+  and, per caselet, the advice that was shown (`ai`).
 - **Downloads.** The CSV is the analysis file: completed responses only,
-  one row per person and case. The raw JSON is every record, finished or
+  one row per person and decision, with the fields the manual lists. The raw JSON is every record, finished or
   not, exactly as saved, including contact details. It can be pasted back
   into **Add responses**.
 
@@ -367,8 +268,8 @@ npm run test:unit    # no browser needed
 The browser tests need Chromium. They use `CHROMIUM_PATH` if set, else a
 browser installed by `npx playwright install chromium`. If `cases.js` or
 `key.js` changes on purpose, `tests/instrument.test.mjs` and
-`tests/scoring.test.mjs` will fail until their pinned values are updated,
-and `docs/instrument.md` must be regenerated.
+`tests/scoring.test.mjs` will fail until their pinned values and the
+manual fixture are updated, and `docs/instrument.md` must be regenerated.
 
 ## Several people on one device
 
