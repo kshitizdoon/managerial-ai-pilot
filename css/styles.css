@@ -2,13 +2,14 @@
    styles.css
 
    Design rules that protect the experiment:
-   - the five issue cards share one size, one type scale, one border,
-     one background. No icons, no per-issue colour, no emphasis.
+   - the five decision cards share one size, one type scale, one border,
+     one background. No icons, no per-decision colour, no emphasis.
    - colour is attached to the RESPONDENT'S choice (own / delegate /
-     wait / hold), never to an issue. None of the four hues reads as
+     wait / hold), never to a decision. None of the four hues reads as
      danger or safety; they are equal-weight and equally saturated.
-   - the only animation is a single simultaneous fade of the whole
-     board, and the state change on a chip the person just pressed.
+   - the caselet illustration uses its own neutral palette (--art-*),
+     never an action colour, and belongs to the caselet, not a decision.
+   - the only animation is a single simultaneous fade of the decisions.
    ============================================================= */
 
 :root{
@@ -18,6 +19,7 @@
   --own-bg:#E4F1ED; --del-bg:#E6EAF6; --wait-bg:#F4EEDF; --hold-bg:#F4E8EF;
   --focus:#0F6E5C;
   --card-pad:1rem;
+  --art-0:#E7ECE6; --art-1:#9AAFA6; --art-2:#F8FAF7; --art-3:#C9B48A; --art-4:#43535F;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
   --paper:#11171C; --card:#1A2229; --ink:#E9EDEA; --muted:#9BA8B3;
@@ -25,6 +27,7 @@
   --own:#5DC6AD; --del:#93A6EA; --wait:#D5AC60; --hold:#D89BC0;
   --own-bg:#173029; --del-bg:#1C2440; --wait-bg:#31291B; --hold-bg:#31212C;
   --focus:#5DC6AD;
+  --art-0:#243038; --art-1:#5E7A70; --art-2:#33424C; --art-3:#9C8758; --art-4:#C9D3DA;
 }}
 :root[data-theme="dark"]{
   --paper:#11171C; --card:#1A2229; --ink:#E9EDEA; --muted:#9BA8B3;
@@ -32,6 +35,7 @@
   --own:#5DC6AD; --del:#93A6EA; --wait:#D5AC60; --hold:#D89BC0;
   --own-bg:#173029; --del-bg:#1C2440; --wait-bg:#31291B; --hold-bg:#31212C;
   --focus:#5DC6AD;
+  --art-0:#243038; --art-1:#5E7A70; --art-2:#33424C; --art-3:#9C8758; --art-4:#C9D3DA;
 }
 
 *{box-sizing:border-box}
@@ -56,57 +60,12 @@ a{color:var(--own)}
 .track{flex:1;height:3px;background:var(--line);border-radius:2px;overflow:hidden}
 .track i{display:block;height:100%;background:var(--own);width:0;transition:width .3s ease}
 
-/* context strip ---------------------------------------------------------- */
-.context{display:flex;flex-wrap:wrap;gap:.5rem;margin:.2rem 0 1.1rem}
-.pill{border:1px solid var(--line);border-radius:8px;background:var(--card);
-  padding:.4rem .65rem;min-width:7rem;flex:1 1 auto;max-width:22rem}
-.pill b{display:block;font-size:.7rem;font-weight:600;color:var(--muted);letter-spacing:.02em}
-.pill span{font-size:.92rem}
-
-/* the board -------------------------------------------------------------- */
-.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));
-  gap:.7rem;align-items:stretch;margin:0 0 1rem}
-.board.fade > *{opacity:0}
-.board.in > *{opacity:1;transition:opacity .22s ease}
-@media (prefers-reduced-motion: reduce){ .board.fade > *{opacity:1} .board.in > *{transition:none} .track i{transition:none} }
-
-.issue{display:flex;flex-direction:column;background:var(--card);
-  border:1px solid var(--line);border-radius:10px;padding:var(--card-pad)}
-.issue .name{font-size:.95rem;font-weight:600;margin:0 0 .35rem}
-.issue .what{font-family:"Source Serif 4",Georgia,serif;font-size:.95rem;line-height:1.45;
-  color:var(--ink);margin:0 0 .75rem;flex:1 1 auto}
-.chips{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:auto}
-.chip{border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;
-  font-size:.85rem;font-weight:500;padding:.34rem .62rem;border-radius:999px;cursor:pointer;
-  transition:background .12s ease,border-color .12s ease}
-.chip:hover{border-color:var(--muted)}
-.chip:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-.chip[data-on="own"]     {background:var(--own-bg); border-color:var(--own); color:var(--own); font-weight:600}
-.chip[data-on="delegate"]{background:var(--del-bg); border-color:var(--del); color:var(--del); font-weight:600}
-.chip[data-on="wait"]    {background:var(--wait-bg);border-color:var(--wait);color:var(--wait);font-weight:600}
-.chip[data-on="hold"]    {background:var(--hold-bg);border-color:var(--hold);color:var(--hold);font-weight:600}
-.chip[data-on="defer"]   {background:var(--wait-bg);border-color:var(--wait);color:var(--wait);font-weight:600}
-.who{margin-top:.5rem;display:none}
-.who.show{display:block}
-.who label{font-size:.78rem;color:var(--muted);display:block;margin-bottom:.2rem}
-
 select,input[type=text],input[type=number],textarea{font:inherit;color:var(--ink);
   background:var(--card);border:1px solid var(--line);border-radius:7px;padding:.42rem .5rem;
   max-width:100%;width:100%}
 textarea{min-height:4.2rem;resize:vertical}
 select:focus-visible,input:focus-visible,textarea:focus-visible,button:focus-visible{
   outline:2px solid var(--focus);outline-offset:2px}
-
-/* allocation meter ------------------------------------------------------- */
-.meter{position:sticky;bottom:0;background:var(--paper);border-top:1px solid var(--line);
-  padding:.55rem 0;display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;font-size:.85rem;z-index:4}
-.tally{padding:.2rem .55rem;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
-.tally.done{font-weight:600}
-.tally[data-k=own].done     {color:var(--own); border-color:var(--own); background:var(--own-bg)}
-.tally[data-k=delegate].done{color:var(--del); border-color:var(--del); background:var(--del-bg)}
-.tally[data-k=wait].done    {color:var(--wait);border-color:var(--wait);background:var(--wait-bg)}
-.tally[data-k=hold].done    {color:var(--hold);border-color:var(--hold);background:var(--hold-bg)}
-.tally[data-k=defer].done   {color:var(--wait);border-color:var(--wait);background:var(--wait-bg)}
 
 /* buttons, cards, errors -------------------------------------------------- */
 button.go{font:inherit;font-weight:600;background:var(--own);color:#fff;border:0;
@@ -118,31 +77,6 @@ button.ghost{font:inherit;background:transparent;color:var(--ink);border:1px sol
   padding:.9rem 1rem;margin:0 0 1rem}
 .err{color:#B3261E;font-size:.88rem;margin:.5rem 0 0;min-height:1.2em}
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .err{color:#F0A9A2} }
-
-/* plan comparison --------------------------------------------------------- */
-.plans{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin:.7rem 0 1rem}
-@media (max-width:660px){ .plans{grid-template-columns:1fr} }
-.plan{border:1px solid var(--line);border-radius:10px;padding:.75rem .85rem;background:var(--card)}
-.plan h4{margin:0 0 .5rem;font-size:.8rem;color:var(--muted);font-weight:600}
-.prow{display:flex;gap:.5rem;padding:.28rem 0;font-size:.9rem;border-bottom:1px dotted var(--line)}
-.prow:last-child{border-bottom:0}
-.prow b{min-width:5.4rem;font-weight:600}
-.prow[data-k=own] b{color:var(--own)} .prow[data-k=delegate] b{color:var(--del)}
-.prow[data-k=wait] b{color:var(--wait)} .prow[data-k=hold] b{color:var(--hold)}
-.prow[data-k=defer] b{color:var(--wait)}
-.why{margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--line);
-  font-family:"Source Serif 4",Georgia,serif;font-size:.93rem;line-height:1.5}
-
-.opts label{display:block;border:1px solid var(--line);border-radius:8px;padding:.55rem .7rem;
-  margin:0 0 .45rem;cursor:pointer;background:var(--card)}
-.opts label:hover{border-color:var(--muted)}
-.opts input{margin-right:.5rem}
-.opts label.sel{border-color:var(--own);background:var(--own-bg)}
-
-.slider{margin:1rem 0 1.3rem;max-width:36rem}
-.slider input[type=range]{width:100%;accent-color:var(--own)}
-.ends{display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted)}
-.val{font-variant-numeric:tabular-nums;font-weight:600}
 
 /* results view ------------------------------------------------------------ */
 table.data{width:100%;border-collapse:collapse;font-size:.84rem;margin:.4rem 0 1.3rem}
@@ -156,46 +90,83 @@ table.data th{color:var(--muted);font-weight:600;font-size:.76rem}
 .flag{border-left:3px solid var(--rule);padding-left:.7rem;margin:.5rem 0;font-size:.9rem;max-width:70ch}
 .scroll{overflow-x:auto}
 .hide{display:none}
-
-/* one-line situation, transition screen ---------------------------------- */
-.situation{font-size:1rem;line-height:1.5;margin:.15rem 0 1rem;max-width:52rem}
 .lead{font-size:1.06rem;margin:.4rem 0 .9rem;max-width:46rem}
 
-/* roster ----------------------------------------------------------------- */
-.roster{border:1px solid var(--line);border-radius:10px;background:var(--card);
-  padding:.7rem .85rem;margin:0 0 1rem}
-.roster h4{margin:0 0 .45rem;font-size:.78rem;font-weight:600;color:var(--muted);
-  letter-spacing:.02em;text-transform:uppercase}
-.roster ul{list-style:none;margin:0;padding:0;display:grid;gap:.4rem;
-  grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
-.roster li{font-size:.86rem;line-height:1.35}
-.roster li b{display:inline}
-.roster li .t{display:inline;margin-left:.3rem}
-.roster li .r{display:block;color:var(--muted);font-size:.8rem}
+/* caselet header ---------------------------------------------------------- */
+.sit{display:flex;gap:1rem;align-items:center;margin:.2rem 0 .9rem}
+.sit .art{flex:0 0 auto;width:5.5rem;height:5.5rem}
+.sit .art svg{display:block;width:100%;height:100%}
+.sit h2{font-size:1.5rem;margin:.1rem 0 .15rem;letter-spacing:-.015em}
+.sit .when{margin:0;color:var(--muted);font-size:.92rem}
+.kicker{margin:0;font-size:.74rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.opening{font-size:1.02rem;margin:0 0 .8rem;max-width:62ch}
+@media (max-width:30rem){ .sit .art{width:4.2rem;height:4.2rem} .sit h2{font-size:1.3rem} }
+.a0{fill:var(--art-0)} .a1{fill:var(--art-1)} .a2{fill:var(--art-2)} .a3{fill:var(--art-3)} .a4{fill:var(--art-4)}
+.a5{fill:none;stroke:var(--art-4)} .s2{fill:none;stroke:var(--art-2)}
 
-/* the situation again, on the advisor screen ----------------------------- */
-.recap{border:1px solid var(--line);border-radius:10px;background:transparent;
-  padding:.8rem .85rem;margin:0 0 1.1rem}
-.recap h4{margin:0 0 .5rem;font-size:.78rem;font-weight:600;color:var(--muted);
-  letter-spacing:.02em;text-transform:uppercase}
-.recap-grid{display:grid;gap:.5rem;margin-bottom:.8rem;
-  grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))}
-.rcard{border:1px solid var(--line);border-radius:8px;background:var(--card);padding:.5rem .6rem}
-.rcard b{display:block;font-size:.85rem;margin-bottom:.2rem}
-.rcard span{font-family:"Source Serif 4",Georgia,serif;font-size:.82rem;line-height:1.35;
-  color:var(--muted);display:block}
-.recap .roster{margin:0}
+/* the four definitions: in the instructions and behind "What the four actions mean" */
+.defs{margin:.8rem 0 0;display:grid;gap:.45rem}
+.defs div{display:grid;grid-template-columns:5.6rem 1fr;gap:.6rem;align-items:baseline}
+.defs dt{font-family:"Public Sans",system-ui,sans-serif;font-weight:700;font-size:.92rem}
+.defs dd{margin:0;font-size:.95rem;line-height:1.45}
+.defs [data-a=own] dt{color:var(--own)} .defs [data-a=delegate] dt{color:var(--del)}
+.defs [data-a=wait] dt{color:var(--wait)} .defs [data-a=hold] dt{color:var(--hold)}
+@media (max-width:30rem){ .defs div{grid-template-columns:1fr;gap:.1rem} }
+details.help{border:1px solid var(--line);border-radius:10px;background:var(--card);
+  padding:.55rem .85rem;margin:0 0 1.1rem;font-size:.9rem}
+details.help summary{cursor:pointer;font-weight:600;color:var(--muted)}
+details.help .defs{margin:.6rem 0 .2rem}
+h3.part{margin:1.2rem 0 .2rem;font-size:1.05rem}
 
-/* likert ----------------------------------------------------------------- */
-.likert{border:1px solid var(--line);border-radius:10px;background:var(--card);
-  padding:.7rem .85rem;margin:1rem 0 0}
-.likert legend{padding:0 .3rem;font-size:.9rem}
-.likert{display:block}
-.likert label{display:flex;align-items:center;gap:.45rem;padding:.3rem 0;font-size:.9rem;cursor:pointer}
-.likert input{accent-color:var(--focus)}
-@media (min-width:44rem){
-  .likert > label{display:inline-flex;margin-right:1.1rem}
-}
+/* decision cards --------------------------------------------------------- */
+.decisions{display:grid;gap:.8rem;margin:.7rem 0 1rem}
+.decisions.fade > *{opacity:0}
+.decisions.in > *{opacity:1;transition:opacity .22s ease}
+@media (prefers-reduced-motion: reduce){ .decisions.fade > *{opacity:1} .decisions.in > *{transition:none} .track i{transition:none} }
+.decision{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1rem 1.1rem 1.05rem}
+.decision.missing{border-color:#B3261E}
+.decision h3{margin:.25rem 0 .35rem;font-size:1.05rem}
+.decision .text{font-size:1rem;line-height:1.55;margin:0 0 .8rem;max-width:none}
+.acts{border:0;margin:0;padding:0;display:grid;gap:.4rem;grid-template-columns:1fr;min-width:0}
+@media (min-width:40rem){ .acts{grid-template-columns:1fr 1fr} }
+.acts legend.lg{font-size:.82rem;font-weight:600;color:var(--muted);margin:0 0 .4rem;padding:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.act{display:flex;align-items:center;gap:.6rem;border:1px solid var(--line);border-radius:9px;
+  padding:.55rem .7rem;cursor:pointer;font-size:.95rem;line-height:1.3;transition:border-color .12s ease,background .12s ease}
+.act:hover{border-color:var(--muted)}
+.act input{margin:0;width:1.1rem;height:1.1rem;flex:0 0 auto;accent-color:var(--ink)}
+.act b{font-weight:600}
+.act.on[data-a=own]     {border-color:var(--own); background:var(--own-bg)}
+.act.on[data-a=delegate]{border-color:var(--del); background:var(--del-bg)}
+.act.on[data-a=wait]    {border-color:var(--wait);background:var(--wait-bg)}
+.act.on[data-a=hold]    {border-color:var(--hold);background:var(--hold-bg)}
+.act.on[data-a=own] b{color:var(--own)} .act.on[data-a=delegate] b{color:var(--del)}
+.act.on[data-a=wait] b{color:var(--wait)} .act.on[data-a=hold] b{color:var(--hold)}
+
+/* first answer beside the AI advice ------------------------------------- */
+.compare{display:grid;grid-template-columns:minmax(8rem,auto) 1fr;gap:.6rem;margin:0 0 .85rem}
+@media (max-width:34rem){ .compare{grid-template-columns:1fr} }
+.compare > div{border:1px solid var(--line);border-radius:9px;padding:.5rem .7rem;background:var(--paper)}
+.compare .tag{display:block;font-size:.72rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.15rem}
+.compare b{font-size:.98rem}
+.compare b[data-a=own]{color:var(--own)} .compare b[data-a=delegate]{color:var(--del)}
+.compare b[data-a=wait]{color:var(--wait)} .compare b[data-a=hold]{color:var(--hold)}
+.compare p{margin:.3rem 0 0;font-size:.93rem;line-height:1.45}
+
+/* confidence: one even row of five on wide screens, a list on phones ---- */
+.scale{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:.9rem 1rem 1rem;margin:1.2rem 0 .9rem;min-width:0}
+.scale legend{padding:0 .35rem;font-size:.95rem;font-weight:600;max-width:60ch}
+.scale legend .muted{font-weight:400}
+.seg{display:grid;grid-template-columns:repeat(5,1fr);gap:.4rem;margin-top:.55rem}
+.seg label{position:relative;display:flex;align-items:center;justify-content:center;text-align:center;min-height:3rem;
+  border:1px solid var(--line);border-radius:9px;padding:.45rem .4rem;font-size:.88rem;line-height:1.25;cursor:pointer;background:var(--paper)}
+.seg label:hover{border-color:var(--muted)}
+.seg input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.seg label:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:2px}
+.seg label.on{border-color:var(--ink);background:var(--card);font-weight:600;box-shadow:inset 0 0 0 1px var(--ink)}
+@media (max-width:38rem){ .seg{grid-template-columns:1fr} .seg label{justify-content:flex-start;min-height:0;text-align:left;padding:.6rem .75rem} }
+label.reason{display:block;font-size:.95rem;font-weight:600;margin:0 0 .35rem}
+label.reason .muted{font-weight:400}
 
 /* development-only: a declared constraint is broken ---------------------- */
 .devwarn{background:#7A1B1B;color:#fff;padding:.7rem 1.1rem;font-size:.85rem;line-height:1.45}

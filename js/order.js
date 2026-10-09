@@ -1,8 +1,8 @@
 /* =============================================================
    order.js — constrained randomisation.
 
-   Cases and cards are shuffled, except where one card only makes sense
-   after another. A card declares a dependency with `after:["otherKey"]`
+   Caselets and decisions are shuffled, except where one only makes sense
+   after another. A decision declares a dependency with `after:["otherKey"]`
    in cases.js; cases declare theirs in CASE_AFTER.
 
    Why not a plain shuffle: a card that says "that agent" or "the drop"
@@ -44,6 +44,23 @@ function topoOrder(keys, edges){
   return out.length === keys.length ? out : keys.slice();   // cyclic: give up, checkOrderRules reports it
 }
 
+/* the declared order, moved only as far as the constraints require:
+   Kahn again, but always taking the earliest free key. Used when
+   randomisation is off. */
+function fixedOrder(keys, edges){
+  const indeg = {}, next = {};
+  keys.forEach(k => { indeg[k] = 0; next[k] = []; });
+  (edges || []).forEach(([a,b]) => { if(indeg[b] != null && next[a]){ indeg[b]++; next[a].push(b); } });
+  const out = [], done = new Set();
+  while(out.length < keys.length){
+    const k = keys.find(x => !done.has(x) && !indeg[x]);
+    if(k === undefined) return keys.slice();                  // cyclic: checkOrderRules reports it
+    out.push(k); done.add(k);
+    next[k].forEach(m => { indeg[m]--; });
+  }
+  return out;
+}
+
 function constrainedShuffle(keys, edges, tries){
   if(!edges || !edges.length) return shuffleArray(keys);
   for(let t = 0; t < (tries || 500); t++){
@@ -56,7 +73,7 @@ function constrainedShuffle(keys, edges, tries){
 /* declared dependencies, as [before, after] pairs ------------------------- */
 function cardEdges(c){
   const out = [];
-  c.issues.forEach(i => (i.after || []).forEach(b => out.push([b, i.k])));
+  c.decisions.forEach(i => (i.after || []).forEach(b => out.push([b, i.k])));
   return out;
 }
 function caseEdges(){
@@ -84,8 +101,8 @@ function hasCycle(keys, edges){
 function checkOrderRules(){
   const problems = [];
   CASES.forEach(c => {
-    const keys = c.issues.map(i => i.k);
-    c.issues.forEach(i => (i.after || []).forEach(b => {
+    const keys = c.decisions.map(i => i.k);
+    c.decisions.forEach(i => (i.after || []).forEach(b => {
       if(b === i.k) problems.push(`case ${c.id}: "${i.k}" declares itself as a prerequisite`);
       else if(!keys.includes(b)) problems.push(`case ${c.id}: "${i.k}" must follow "${b}", which is not an issue in this case`);
     }));

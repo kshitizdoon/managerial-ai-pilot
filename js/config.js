@@ -4,25 +4,15 @@
 
 window.CONFIG = {
 
-  /* ---- How the deferral decision is asked ------------------------------
-     "split"   1 Own, 2 Delegate, 1 Wait, 1 Hold.  (what you piloted)
-     "merged"  1 Own, 2 Delegate, 2 Set aside, then ONE follow-up question:
-               which of the two, if either, nobody should act on until a
-               fact is checked.
-     A participant can be sent to either mode with ?defer=merged in the link.
-     The mode used is stored with every response.                          */
-  deferMode: "split",
-
-  /* ---- Scoring ---------------------------------------------------------
-     unlistedDelegateScore: what a person who is not in the key's list for
-     that issue scores. 0 is what your current key implies. 40 is gentler:
-     nothing in Case 1 says Priya cannot chase the supplier.               */
-  unlistedDelegateScore: 0,
-
-  /* In "merged" mode the case score is (Own + Delegate + DeferSet) / 3.
-     The hold follow-up is scored separately, not inside the case score.
-     Set includeHoldInCaseScore true to fold it back in as a 4th part.     */
-  includeHoldInCaseScore: false,
+  /* ---- AI advice ---------------------------------------------------------
+     Every caselet has advice at four quality levels (cases.js). Each
+     respondent is given one of four conditions at random, and the
+     condition rotates the levels across the six caselets: caselet i (in
+     cases.js order) gets level (i + condition) mod 4. So every respondent
+     sees all four levels, two of them twice, and across the four
+     conditions every caselet appears at every level exactly once.
+     ?ai=0 .. ?ai=3 in the link forces a condition, for testing.          */
+  aiConditions: 4,
 
   /* ---- Name and mobile -------------------------------------------------
      "end"   asked on the last screen, for the prize draw.  (default)
@@ -34,14 +24,15 @@ window.CONFIG = {
   contactAt: "end",
 
   /* ---- Fielding --------------------------------------------------------ies */
-  randomiseCaseOrder: true,   // order of the six cases
-  randomiseCardOrder: true,   // order of the five cards inside a case
+  randomiseCaseOrder: true,       // order of the six caselets
+  randomiseDecisionOrder: false,  // order of the five decisions: as numbered in the manual
   showPilotQuestions: true,   // the "help us fix the survey" block
 
   /* ---- Where responses go ---------------------------------------------
      Netlify Function + Blobs is the only server store. The survey saves
-     after About you, after every first plan, after every final plan, and
-     at Finish, and retries failed saves. localStorage is a browser backup.
+     after About you, after every caselet's first answers, after every
+     caselet's final answers, and at Finish, and retries failed saves.
+     localStorage is a browser backup.
      "local" (set by build.py for the single-file bundle) skips the server. */
   storage: "function",
   functionPath: "/api/responses",
@@ -51,7 +42,15 @@ window.CONFIG = {
      there only. Do not write it in this file: every visitor can read it,
      and the records hold names and mobile numbers.                       */
 
+  /* ---- Instrument version ---------------------------------------------
+     A name for this version of the cases, key and scoring. It is stamped,
+     with automatic fingerprints of cases.js and key.js, on every new
+     response and never changed afterwards. Give it a new name whenever
+     you edit cases.js, key.js or the scoring, so responses collected
+     under different versions can be told apart.                          */
+  instrumentVersion: "survey-2026-10-round2",
+
   /* ---- Copy ------------------------------------------------------------ */
-  studyTitle: "Six managerial decisions",
-  debrief: "The AI advisor here was not a live AI tool. We wrote its plans, and some of them were weak on purpose. That is how we study the way people use AI advice."
+  studyTitle: "Managerial Decision Survey",
+  debrief: "The AI advisor here was not a live AI tool. We wrote its recommendations, and their quality was varied on purpose. That is how we study the way people use AI advice."
 };

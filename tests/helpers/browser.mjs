@@ -1,0 +1,132 @@
+/* Browser harness: serves the site folder, launches Chromium, and answers
+   /api/responses with the real Netlify Function over an in-memory store.
+   Chromium: CHROMIUM_PATH if set, else a Playwright-managed browser under
+   PLAYWRIGHT_BROWSERS_PATH (or /opt/pw-browsers), else Playwright's default. */
+import fs from "node:fs";
+import http from "node:http";
+import path from "node:path";
+import { chromium } from "playwright-core";
+import { ROOT } from "./load.mjs";
+import { loadFunction } from "./fnstore.mjs";
+
+const TYPES = { ".html":"text/html", ".js":"text/javascript", ".css":"text/css", ".json":"application/json", ".md":"text/markdown" };
+
+export function startServer(){
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, "http://x");
+    let p = path.normalize(decodeURIComponent(url.pathname)).replace(/^([/\\])+/, "");
+    if(!p) p = "index.html";
+    const file = path.join(ROOT, p);
+    if(!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()){ res.writeHead(404); return res.end(); }
+    res.writeHead(200, { "content-type": TYPES[path.extname(file)] || "application/octet-stream" });
+    fs.createReadStream(file).pipe(res);
+  });
+  return new Promise(resolve => server.listen(0, "127.0.0.1", () =>
+    resolve({ server, base: `http://127.0.0.1:${server.address().port}` })));
+}
+
+function findChromium(){
+  if(process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
+  const roots = [process.env.PLAYWRIGHT_BROWSERS_PATH, "/opt/pw-browsers"].filter(Boolean);
+  for(const r of roots){
+    if(!fs.existsSync(r)) continue;
+    for(const d of fs.readdirSync(r).filter(d => /^chromium-\d+$/.test(d)).sort().reverse()){
+      for(const sub of ["chrome-linux/chrome", "chrome-linux64/chrome", "chrome-mac/Chromium.app/Contents/MacOS/Chromium", "chrome-win/chrome.exe"]){
+        const f = path.join(r, d, sub);
+        if(fs.existsSync(f)) return f;
+      }
+    }
+  }
+  return undefined;
+}
+
+export async function launch(){
+  const executablePath = findChromium();
+  return chromium.launch(executablePath ? { executablePath } : {});
+}
+
+/* One site + one function store, shared by the pages a test opens.
+   api.failPosts = n makes the next n POSTs return 500 before reaching the
+   function; api.posts records every POST body in arrival order. */
+export async function setup(){
+  const { server, base } = await startServer();
+  const browser = await launch();
+  const fn = await loadFunction();
+  const api = { posts: [], failPosts: 0, fn };
+  async function newPage(){
+    const context = await browser.newContext({ acceptDownloads: true });
+    const page = await context.newPage();
+    page.errors = [];
+    page.on("pageerror", e => page.errors.push(String(e)));
+    /* fonts are the only outside requests; drop them so tests never need a network */
+    await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    await page.route("**/api/responses*", async route => {
+      const req = route.request();
+      if(req.method() === "POST"){
+        api.posts.push(JSON.parse(req.postData()));
+        if(api.failPosts > 0){ api.failPosts--; return route.fulfill({ status: 500, body: "test failure" }); }
+      }
+      const res = await fn.handler(new Request(req.url(), { method: req.method(),
+        body: req.method() === "POST" ? req.postData() : undefined }));
+      route.fulfill({ status: res.status, contentType: "application/json", body: await res.text() });
+    });
+    return page;
+  }
+  return { base, browser, api, fn, newPage,
+    async close(){ await browser.close(); server.close(); } };
+}
+
+/* Plays one full response. first: the action given to every decision
+   first time ("own" by default; "cycle" rotates through the four).
+   finals: per caselet, "keep" (leave the first answers) or "ai" (switch
+   every decision to the AI's action). Records, per caselet, the
+   decision titles each screen showed and the advice it showed. */
+export async function playSurvey(page, base, { first = "cycle", finals, finish = true, stopAfterCases = 6,
+                                               query = "?new=1", practice = ["wait", "hold"], conf = 3 } = {}){
+  finals = finals || ["keep", "ai", "keep", "ai", "keep", "ai"];
+  const ACTS = ["own", "delegate", "wait", "hold"];
+  await page.goto(base + "/" + query);
+  await page.click("#begin");
+  for(let i = 1; i <= 5; i++) await page.selectOption("#q" + i, { index: 1 });
+  await page.click("#next");                                   // About you
+  await page.click("#next");                                   // How it works
+  await page.click(`input[name=p-a][value=${practice[0]}]`);
+  await page.click(`input[name=p-b][value=${practice[1]}]`);
+  await page.click("#next");                                   // check
+  await page.click("#next");                                   // continue
+  const seen = [];
+  for(let n = 0; n < stopAfterCases; n++){
+    await page.waitForSelector(".sit h2");
+    const s = { name: await page.textContent(".sit h2"), final: finals[n] };
+    s.first = await page.$$eval(".decision h3", e => e.map(x => x.textContent));
+    const keys = await page.$$eval(".decision", e => e.map(x => x.dataset.k));
+    s.keys = keys;
+    s.answers = {};
+    for(let i = 0; i < keys.length; i++){
+      const a = first === "cycle" ? ACTS[(i + n) % 4] : first;
+      s.answers[keys[i]] = a;
+      await page.click(`input[name="a-${keys[i]}"][value=${a}]`);
+    }
+    await page.click("#next");                                 // save first answers
+    await page.waitForSelector(".compare");
+    s.finalTitles = await page.$$eval(".decision h3", e => e.map(x => x.textContent));
+    s.mine = await page.$$eval(".compare .mine b", e => e.map(x => x.dataset.a));
+    s.advice = await page.$$eval(".compare .advice b", e => e.map(x => x.dataset.a));
+    s.adviceText = await page.$$eval(".compare .advice p", e => e.map(x => x.textContent));
+    s.preselected = await page.$$eval(".decision", e => e.map(x => (x.querySelector("input:checked") || {}).value));
+    if(finals[n] === "ai")
+      for(let i = 0; i < keys.length; i++) await page.click(`input[name="b-${keys[i]}"][value=${s.advice[i]}]`);
+    if(conf) await page.click(`.seg input[value='${conf}']`, { force: true });
+    await page.click("#next");                                 // save final answers
+    seen.push(s);
+  }
+  if(finish && stopAfterCases === 6){
+    for(const id of ["e1", "e2", "f1", "f2", "f5"]) await page.selectOption("#" + id, { index: 1 });
+    await page.click("#next");
+    await page.waitForSelector("h1:text('Thank you')");
+  } else if(stopAfterCases === 6){
+    await page.waitForSelector("#e1");
+  }
+  const record = await page.evaluate(() => JSON.parse(localStorage.getItem("inbasket_pilot_v2")));
+  return { seen, record };
+}
