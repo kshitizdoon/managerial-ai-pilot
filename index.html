@@ -51,7 +51,7 @@ const MODULES = [
   ["js/scoring.js",   () => typeof scorePlan === "function" && typeof aiAssignment === "function"],
   ["js/stats.js",     () => typeof mean === "function"],
   ["js/storage.js",   () => typeof mergeRecords === "function" && typeof archivedRows === "function"],
-  ["js/survey.js",    () => typeof startSurvey === "function" && typeof pageFinal === "function"],
+  ["js/survey.js",    () => typeof startSurvey === "function" && typeof failReason === "function"],
   ["js/dashboard.js", () => typeof showDashboard === "function" && typeof rawExport === "function" && typeof decisionRows === "function"]
 ];
 function missingModules(){

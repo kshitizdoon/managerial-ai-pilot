@@ -11,6 +11,11 @@
      every later copy of that PID, so it cannot change after the fact.
    - GET needs DASHBOARD_KEY. With no key set, nothing is returned,
      because the records can hold names and mobile numbers.
+   - GET ?health=1 needs no key and returns no records. It writes, reads
+     and deletes one probe in a separate store, so you can open
+     yoursite/api/responses?health=1 and see whether saving works.
+   - Any failure answers with JSON naming the error, and is logged, so the
+     survey and the Netlify function log both show the real cause.
    ============================================================= */
 
 import { getStore } from "@netlify/blobs";
@@ -18,8 +23,19 @@ import { getStore } from "@netlify/blobs";
 const STORE = "pilot-responses";
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_WRITE_TRIES = 5;
+const HEALTH_STORE = "pilot-health";
 
 export default async (request) => {
+  try {
+    return await handle(request);
+  } catch (err) {
+    console.error("responses function failed", request.method, err);
+    return json({ error: "server error", detail: describe(err) }, 500);
+  }
+};
+
+async function handle(request) {
+  if (request.method === "GET" && new URL(request.url).searchParams.has("health")) return health();
   const store = getStore({ name: STORE, consistency: "strong" });
 
   if (request.method === "POST") {
@@ -83,7 +99,35 @@ export default async (request) => {
   }
 
   return json({ error: "method not allowed" }, 405);
-};
+}
+
+/* write, read back and delete one probe, step by step */
+async function health() {
+  const out = { ok: false, step: "open store", dashboardKeySet: !!process.env.DASHBOARD_KEY };
+  try {
+    const store = getStore({ name: HEALTH_STORE, consistency: "strong" });
+    const key = "probe-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+    const value = { at: new Date().toISOString() };
+    out.step = "write";
+    await store.setJSON(key, value);
+    out.step = "read";
+    const back = await store.get(key, { type: "json" });
+    if (!back || back.at !== value.at) throw new Error("read back " + JSON.stringify(back) + ", expected " + JSON.stringify(value));
+    out.step = "delete";
+    await store.delete(key);
+    out.step = "done";
+    out.ok = true;
+    return json(out);
+  } catch (err) {
+    console.error("health check failed at", out.step, err);
+    return json({ ...out, error: describe(err) }, 500);
+  }
+}
+
+function describe(err) {
+  if (!err) return "unknown error";
+  return ((err.name ? err.name + ": " : "") + (err.message || String(err))).slice(0, 500);
+}
 
 export const config = { path: "/api/responses" };
 

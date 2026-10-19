@@ -125,6 +125,7 @@ test("a failed final save shows Try again, and the retry reaches the server", as
   await page.click("#next");
   await page.waitForSelector("h1:text('Thank you')");
   assert.ok(await page.isVisible("#retry"));
+  assert.equal(await page.textContent("#failwhy"), "Technical detail: function 500: test failure");
   assert.notEqual(env.fn.stored(partial.pid).status, "complete");
   const dumped = JSON.parse(await page.inputValue("#dump"));
   assert.equal(dumped.pid, partial.pid);

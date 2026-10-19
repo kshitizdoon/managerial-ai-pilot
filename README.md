@@ -133,6 +133,20 @@ Locally, `python3 build.py` now refuses to run if `index.html` points at a
 file that is not in the folder, which catches the same mistake before you
 push.
 
+## If responses do not save
+
+1. Open `https://yoursite.netlify.app/api/responses?health=1`. It needs no
+   key and shows no data. `"ok": true` means the function and Netlify Blobs
+   work. Otherwise `step` and `error` say which part failed. A 404 means
+   the function is not deployed.
+2. On a failed save, the participant's last screen shows a
+   *Technical detail* line, and the copied text holds the same message in
+   `lastServerSaveError`. `network: ...` means the request never got an
+   answer: offline, blocked by the network or a browser extension, or the
+   page is not on the Netlify site. `function 500: ...` carries the
+   server's own error.
+3. Netlify → **Logs → Functions → responses** shows every failure in full.
+
 ## Check before you send the link out
 
 - Open the site, press **Start**, and finish one caselet. Open the browser

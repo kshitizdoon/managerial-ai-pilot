@@ -126,3 +126,47 @@ test("a brand new PID keeps the stamp it arrives with", async () => {
   await fn.post({ pid: "n1", saveSeq: 1, instrument: { instrumentVersion: "x" } });
   assert.deepEqual(fn.stored("n1").instrument, { instrumentVersion: "x" });
 });
+
+test("health check writes, reads and deletes a probe without a key, and touches no responses", async () => {
+  const fn = await loadFunction();
+  await fn.post({ pid: "keep1", saveSeq: 1 });
+  const r = await fn.get(null).then(() => fn.handler(new Request("http://site/api/responses?health=1")));
+  const j = await r.json();
+  assert.equal(r.status, 200);
+  assert.equal(j.ok, true);
+  assert.equal(j.step, "done");
+  assert.equal(typeof j.dashboardKeySet, "boolean");
+  assert.equal(j.responses, undefined, "no records in a health answer");
+  assert.deepEqual([...fn.db().keys()], ["keep1"], "response store untouched");
+});
+
+test("health check names the step and the error when the store fails", async () => {
+  const fn = await loadFunction();
+  fn.hooks.failOn = "set";
+  const r = await fn.handler(new Request("http://site/api/responses?health=1"));
+  const j = await r.json();
+  assert.equal(r.status, 500);
+  assert.equal(j.ok, false);
+  assert.equal(j.step, "write");
+  assert.equal(j.error, "BlobsInternalError: mock write failure");
+});
+
+test("a store failure during a save answers 500 with the real error, as JSON", async () => {
+  const fn = await loadFunction();
+  fn.hooks.failOn = "set";
+  const r = await fn.post({ pid: "f1", saveSeq: 1 });
+  assert.equal(r.status, 500);
+  assert.deepEqual(r.json, { error: "server error", detail: "BlobsInternalError: mock write failure" });
+  fn.hooks.failOn = null;
+  assert.equal((await fn.post({ pid: "f1", saveSeq: 1 })).status, 200, "recovers once the store works");
+});
+
+test("an unreadable record is only ever written as new, never over an existing one", async () => {
+  const fn = await loadFunction();
+  await fn.post({ pid: "r1", saveSeq: 9, done: true, mark: "kept" });
+  fn.hooks.failOn = "read";
+  const r = await fn.post({ pid: "r1", saveSeq: 1, done: false, mark: "stale" });
+  assert.equal(r.status, 409, "gives up rather than overwrite blind");
+  fn.hooks.failOn = null;
+  assert.equal(fn.stored("r1").mark, "kept");
+});

@@ -56,11 +56,17 @@ const sleep = ms => new Promise(res => setTimeout(res, ms));
 async function sendBody(body){
   let bytes = body.length;
   try{ bytes = new TextEncoder().encode(body).length; }catch(e){}
-  const r = await fetch(CONFIG.functionPath, {
-    method:"POST", headers:{"Content-Type":"application/json"}, body,
-    /* keepalive lets the request finish if the tab closes */
-    keepalive: bytes < KEEPALIVE_MAX_BYTES
-  });
+  let r;
+  try{
+    r = await fetch(CONFIG.functionPath, {
+      method:"POST", headers:{"Content-Type":"application/json"}, body,
+      /* keepalive lets the request finish if the tab closes */
+      keepalive: bytes < KEEPALIVE_MAX_BYTES
+    });
+  }catch(e){
+    /* no answer at all: offline, blocked, or no function on this host */
+    throw new Error("network: " + String(e && e.message || e));
+  }
   if(!r.ok){
     const detail = await r.text().catch(() => "");
     throw new Error("function " + r.status + (detail ? ": " + detail : ""));

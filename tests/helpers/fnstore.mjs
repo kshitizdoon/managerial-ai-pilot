@@ -11,14 +11,15 @@ import { ROOT } from "./load.mjs";
 
 const MOCK = `
 export const stores = new Map();
-export const hooks = { beforeSet: null };
+export const hooks = { beforeSet: null, failOn: null };
 let n = 0;
 export function getStore({ name }){
   if(!stores.has(name)) stores.set(name, new Map());
   const db = stores.get(name);
   return {
-    async getWithMetadata(k){ const r = db.get(k); return r ? { data: JSON.parse(r.v), etag: r.e } : null; },
+    async getWithMetadata(k){ if(hooks.failOn === "read") throw new Error("mock read failure"); const r = db.get(k); return r ? { data: JSON.parse(r.v), etag: r.e } : null; },
     async setJSON(k, v, o = {}){
+      if(hooks.failOn === "set") throw Object.assign(new Error("mock write failure"), { name: "BlobsInternalError" });
       if(hooks.beforeSet){ const h = hooks.beforeSet; hooks.beforeSet = null; await h(db); }
       const cur = db.get(k);
       if(o.onlyIfNew && cur) return { modified: false };
@@ -27,7 +28,8 @@ export function getStore({ name }){
       return { modified: true, etag: "etag" + n };
     },
     async list(){ return { blobs: [...db.keys()].map(key => ({ key })) }; },
-    async get(k){ const r = db.get(k); return r ? JSON.parse(r.v) : null; }
+    async get(k){ if(hooks.failOn === "get") throw new Error("mock get failure"); const r = db.get(k); return r ? JSON.parse(r.v) : null; },
+    async delete(k){ db.delete(k); }
   };
 }`;
 
