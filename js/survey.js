@@ -116,6 +116,8 @@ async function retryFinalSave(){
   } else if(ST === rec){
     const m = document.getElementById("retrymsg");
     if(m) m.textContent = "Still could not reach the study database. Please use Copy or Download below.";
+    const w = document.getElementById("failwhy");
+    if(w) w.textContent = failReason(rec);
     const b = document.getElementById("retry");
     if(b){ b.disabled = false; b.textContent = "Try again"; }
   }
@@ -507,6 +509,11 @@ function closing(){
   };
 }
 
+/* the technical reason the last save failed, for the participant to pass on */
+function failReason(rec){
+  return rec && rec.lastServerSaveError ? "Technical detail: " + String(rec.lastServerSaveError).slice(0, 300) : "";
+}
+
 function thanks(){
   setStep("Done", 100);
   const ok = !!ST.savedVia;
@@ -518,6 +525,7 @@ function thanks(){
    <div class="card">
      <p><b>Your answers could not reach the study database yet.</b></p>
      <p class="small" id="retrymsg">${finalRetryRunning ? "Trying again…" : "Check your connection and press Try again."}</p>
+     <p class="small muted" id="failwhy">${esc(failReason(ST))}</p>
      <p style="margin:.5rem 0 0"><button class="go" id="retry"${finalRetryRunning ? " disabled" : ""}>${finalRetryRunning ? "Trying…" : "Try again"}</button></p>
      <p class="small" style="margin-top:1rem">If it still fails, copy the text below and send it to the person who shared this link, or download it as a file. It holds your answers, and any contact details you chose to give.</p>
      <textarea id="dump" readonly style="min-height:6rem"></textarea>

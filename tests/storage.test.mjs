@@ -134,3 +134,10 @@ test("archive keeps earlier sessions on the device, newest 20, one per PID", () 
   assert.equal(a.filter(r => r.pid === "p22").length, 1);
   assert.equal(a[a.length - 1].v, 2);
 });
+
+test("no answer at all is reported as a network error", async () => {
+  const site = loadSite({ fetch: async () => { throw new TypeError("Failed to fetch"); } });
+  freshRecord(site);
+  assert.equal(await site.run(`checkpointResponse(R, "x")`), null);
+  assert.equal(JSON.parse(site.localStorage.getItem(LS_KEY)).lastServerSaveError, "network: Failed to fetch");
+});
