@@ -124,6 +124,36 @@ test("dashboard: counts, status tables, decisions, AI levels, raw JSON and CSV",
   assert.match(await imp.textContent("#counts"), /1 marked finished but incomplete; 1 from an earlier version/);
 });
 
+test("dashboard: respondents who fail the attention check can be left out of the statistics", async () => {
+  const solo = await setup();
+  try {
+    const ok = JSON.parse(JSON.stringify(fresh));
+    const bad = JSON.parse(JSON.stringify(fresh));
+    bad.pid = "inattentive"; bad.practice = { ...bad.practice, answers: { a: "own", b: "wait" }, correct: false };
+    await solo.fn.post(ok);
+    await solo.fn.post(bad);
+    const page = await solo.newPage();
+    await page.goto(solo.base + "/#researcher=" + KEY);
+    await page.waitForSelector("#attn");
+    assert.match(await page.textContent("#attn"), /^1 of 2 completed respondents answered both practice questions as expected\. Failed: inattentive\./);
+    const n = async () => page.$eval("#cases tr:nth-child(2) td:nth-child(2)", x => x.textContent);
+    assert.equal(await n(), "2");
+    await page.check("#exclAttn");
+    await page.waitForFunction(() => document.querySelector("#cases tr:nth-child(2) td:nth-child(2)").textContent === "1");
+    assert.match(await page.textContent("#counts"), /2 completed responses; .*1 left out of the statistics for failing the attention check/);
+    assert.equal(await page.isChecked("#exclAttn"), true);
+    /* the CSV keeps everyone, with the flag to filter on */
+    const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#csv")]);
+    const lines = fs.readFileSync(await dl.path(), "utf8").split("\n");
+    const col = lines[0].split(",").indexOf("attention_check_passed");
+    assert.ok(col > 0);
+    const flags = Object.fromEntries(lines.slice(1).map(l => l.split(",")).map(r => [r[0], r[col]]));
+    assert.deepEqual(flags, { [fresh.pid]: "1", inattentive: "0" });
+    await page.uncheck("#exclAttn");
+    await page.waitForFunction(() => document.querySelector("#cases tr:nth-child(2) td:nth-child(2)").textContent === "2");
+  } finally { await solo.close(); }
+});
+
 test("dashboard with no completed responses still lists the status tables and offers raw JSON", async () => {
   const solo = await setup();
   try {

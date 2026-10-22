@@ -9,7 +9,7 @@ const run = src => plain(site.run(src));
 /* If one of these changes, cases.js or key.js changed. That is allowed,
    but it is a new instrument version: rename CONFIG.instrumentVersion,
    regenerate docs, and update these two pins in the same commit. */
-const PINNED = { instrumentVersion: "survey-2026-10-round2", casesHash: "4242e73d", keyHash: "5505a7da", scoringVersion: 2 };
+const PINNED = { instrumentVersion: "survey-2026-10-round3", casesHash: "d15a62e9", keyHash: "5505a7da", scoringVersion: 2 };
 
 test("instrumentMeta describes the deployed instrument", () => {
   const m = run("instrumentMeta()");

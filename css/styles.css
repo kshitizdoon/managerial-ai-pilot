@@ -4,9 +4,9 @@
    Design rules that protect the experiment:
    - the five decision cards share one size, one type scale, one border,
      one background. No icons, no per-decision colour, no emphasis.
-   - colour is attached to the RESPONDENT'S choice (own / delegate /
-     wait / hold), never to a decision. None of the four hues reads as
-     danger or safety; they are equal-weight and equally saturated.
+   - the four actions share one neutral style. A selected option is
+     marked by a dark border and a grey fill, the same for all four, so
+     no colour can suggest that one action is safer or better.
    - the caselet illustration uses its own neutral palette (--art-*),
      never an action colour, and belongs to the caselet, not a decision.
    - the only animation is a single simultaneous fade of the decisions.
@@ -15,26 +15,23 @@
 :root{
   --paper:#F7F8F6; --card:#FFFFFF; --ink:#1A2430; --muted:#5E6B78;
   --line:#DBDFDA; --rule:#C9CFC8;
-  --own:#0F6E5C; --del:#38498F; --wait:#8A6412; --hold:#78345C;
-  --own-bg:#E4F1ED; --del-bg:#E6EAF6; --wait-bg:#F4EEDF; --hold-bg:#F4E8EF;
+  --accent:#2F5D50;
   --focus:#0F6E5C;
-  --card-pad:1rem;
+  --card-pad:1rem; --sel-bg:#EEF0EE;
   --art-0:#E7ECE6; --art-1:#9AAFA6; --art-2:#F8FAF7; --art-3:#C9B48A; --art-4:#43535F;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
   --paper:#11171C; --card:#1A2229; --ink:#E9EDEA; --muted:#9BA8B3;
   --line:#2C363E; --rule:#3A454E;
-  --own:#5DC6AD; --del:#93A6EA; --wait:#D5AC60; --hold:#D89BC0;
-  --own-bg:#173029; --del-bg:#1C2440; --wait-bg:#31291B; --hold-bg:#31212C;
-  --focus:#5DC6AD;
+  --accent:#3F7F6E;
+  --focus:#5DC6AD; --sel-bg:#26313A;
   --art-0:#243038; --art-1:#5E7A70; --art-2:#33424C; --art-3:#9C8758; --art-4:#C9D3DA;
 }}
 :root[data-theme="dark"]{
   --paper:#11171C; --card:#1A2229; --ink:#E9EDEA; --muted:#9BA8B3;
   --line:#2C363E; --rule:#3A454E;
-  --own:#5DC6AD; --del:#93A6EA; --wait:#D5AC60; --hold:#D89BC0;
-  --own-bg:#173029; --del-bg:#1C2440; --wait-bg:#31291B; --hold-bg:#31212C;
-  --focus:#5DC6AD;
+  --accent:#3F7F6E;
+  --focus:#5DC6AD; --sel-bg:#26313A;
   --art-0:#243038; --art-1:#5E7A70; --art-2:#33424C; --art-3:#9C8758; --art-4:#C9D3DA;
 }
 
@@ -51,14 +48,14 @@ h3{font-size:.98rem;margin:1.3rem 0 .45rem;font-weight:600}
 p{margin:0 0 .8rem;max-width:66ch}
 .serif{font-family:"Source Serif 4",Georgia,serif;line-height:1.55}
 .muted{color:var(--muted)} .small{font-size:.86rem}
-a{color:var(--own)}
+a{color:var(--accent)}
 
 /* top bar ---------------------------------------------------------------- */
 .bar{display:flex;align-items:center;gap:.9rem;border-bottom:1px solid var(--line);
   padding:.65rem 1.1rem;position:sticky;top:0;background:var(--paper);z-index:6}
 .bar .step{font-size:.85rem;color:var(--muted);white-space:nowrap}
 .track{flex:1;height:3px;background:var(--line);border-radius:2px;overflow:hidden}
-.track i{display:block;height:100%;background:var(--own);width:0;transition:width .3s ease}
+.track i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s ease}
 
 select,input[type=text],input[type=number],textarea{font:inherit;color:var(--ink);
   background:var(--card);border:1px solid var(--line);border-radius:7px;padding:.42rem .5rem;
@@ -68,7 +65,7 @@ select:focus-visible,input:focus-visible,textarea:focus-visible,button:focus-vis
   outline:2px solid var(--focus);outline-offset:2px}
 
 /* buttons, cards, errors -------------------------------------------------- */
-button.go{font:inherit;font-weight:600;background:var(--own);color:#fff;border:0;
+button.go{font:inherit;font-weight:600;background:var(--accent);color:#fff;border:0;
   border-radius:8px;padding:.6rem 1.25rem;cursor:pointer}
 button.go:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
 button.ghost{font:inherit;background:transparent;color:var(--ink);border:1px solid var(--line);
@@ -107,16 +104,31 @@ table.data th{color:var(--muted);font-weight:600;font-size:.76rem}
 /* the four definitions: in the instructions and behind "What the four actions mean" */
 .defs{margin:.8rem 0 0;display:grid;gap:.45rem}
 .defs div{display:grid;grid-template-columns:5.6rem 1fr;gap:.6rem;align-items:baseline}
-.defs dt{font-family:"Public Sans",system-ui,sans-serif;font-weight:700;font-size:.92rem}
+.defs dt{font-family:"Public Sans",system-ui,sans-serif;font-weight:700;font-size:.92rem;color:var(--ink)}
 .defs dd{margin:0;font-size:.95rem;line-height:1.45}
-.defs [data-a=own] dt{color:var(--own)} .defs [data-a=delegate] dt{color:var(--del)}
-.defs [data-a=wait] dt{color:var(--wait)} .defs [data-a=hold] dt{color:var(--hold)}
 @media (max-width:30rem){ .defs div{grid-template-columns:1fr;gap:.1rem} }
 details.help{border:1px solid var(--line);border-radius:10px;background:var(--card);
   padding:.55rem .85rem;margin:0 0 1.1rem;font-size:.9rem}
 details.help summary{cursor:pointer;font-weight:600;color:var(--muted)}
 details.help .defs{margin:.6rem 0 .2rem}
 h3.part{margin:1.2rem 0 .2rem;font-size:1.05rem}
+
+/* key numbers from the opening, restated as tiles */
+.facts{list-style:none;margin:0 0 .9rem;padding:0;display:grid;gap:.5rem;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));max-width:44rem}
+.facts li{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:.5rem .7rem}
+.facts b{display:block;font-size:1.25rem;line-height:1.2;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.facts span{display:block;font-size:.8rem;color:var(--muted);line-height:1.3}
+
+/* what is to be decided, under each decision */
+.ask{margin:-.3rem 0 .85rem;font-size:.95rem;line-height:1.45;padding:.45rem .65rem;border-left:3px solid var(--rule);background:var(--paper);border-radius:0 6px 6px 0;max-width:none}
+.ask b{font-weight:600}
+
+/* who decides, and when */
+.whowhen{border-collapse:collapse;margin:.9rem 0 .6rem;font-family:"Public Sans",system-ui,sans-serif;font-size:.9rem;width:100%;max-width:34rem}
+.whowhen th,.whowhen td{text-align:left;padding:.35rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+.whowhen thead th{font-size:.74rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.whowhen tbody th{font-weight:700}
+.example{font-size:.93rem;margin:.2rem 0 .3rem;max-width:62ch}
 
 /* decision cards --------------------------------------------------------- */
 .decisions{display:grid;gap:.8rem;margin:.7rem 0 1rem}
@@ -136,12 +148,7 @@ h3.part{margin:1.2rem 0 .2rem;font-size:1.05rem}
 .act:hover{border-color:var(--muted)}
 .act input{margin:0;width:1.1rem;height:1.1rem;flex:0 0 auto;accent-color:var(--ink)}
 .act b{font-weight:600}
-.act.on[data-a=own]     {border-color:var(--own); background:var(--own-bg)}
-.act.on[data-a=delegate]{border-color:var(--del); background:var(--del-bg)}
-.act.on[data-a=wait]    {border-color:var(--wait);background:var(--wait-bg)}
-.act.on[data-a=hold]    {border-color:var(--hold);background:var(--hold-bg)}
-.act.on[data-a=own] b{color:var(--own)} .act.on[data-a=delegate] b{color:var(--del)}
-.act.on[data-a=wait] b{color:var(--wait)} .act.on[data-a=hold] b{color:var(--hold)}
+.act.on{border-color:var(--ink);background:var(--sel-bg);box-shadow:inset 0 0 0 1px var(--ink)}
 
 /* first answer beside the AI advice ------------------------------------- */
 .compare{display:grid;grid-template-columns:minmax(8rem,auto) 1fr;gap:.6rem;margin:0 0 .85rem}
@@ -149,8 +156,6 @@ h3.part{margin:1.2rem 0 .2rem;font-size:1.05rem}
 .compare > div{border:1px solid var(--line);border-radius:9px;padding:.5rem .7rem;background:var(--paper)}
 .compare .tag{display:block;font-size:.72rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.15rem}
 .compare b{font-size:.98rem}
-.compare b[data-a=own]{color:var(--own)} .compare b[data-a=delegate]{color:var(--del)}
-.compare b[data-a=wait]{color:var(--wait)} .compare b[data-a=hold]{color:var(--hold)}
 .compare p{margin:.3rem 0 0;font-size:.93rem;line-height:1.45}
 
 /* confidence: one even row of five on wide screens, a list on phones ---- */

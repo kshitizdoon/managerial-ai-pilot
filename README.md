@@ -11,6 +11,13 @@ The instrument follows the researcher manual of 8 October 2026
 It does not use the fixed action quotas or named delegates of the earlier
 pilot, and the manual says not to pool the two without a bridging analysis.
 
+Pilot feedback of 22 October 2026 is applied on top of the manual: each
+decision says what is to be decided, each caselet shows its key numbers
+as tiles, "class schedule" is reworded, weak AI advice now gives reasons
+as specific as good advice, the instructions add a who-decides / when grid
+with an Own-versus-Delegate example, and the actions carry no colours.
+`docs/instrument.md` lists every change.
+
 Plain HTML, CSS and JavaScript. No build step, no framework.
 
 ---
@@ -182,8 +189,9 @@ in the outcome you are measuring.
 ## The design
 
 **Flow.** Welcome and consent, About you, how it works (the manual's
-instructions and the four definitions), one practice question on Wait
-versus Hold (not scored; the answer and whether it matched are kept), then
+instructions, a who-decides / when grid, an Own-versus-Delegate example and
+the four definitions), two practice questions on Wait versus Hold (not
+scored; both right is the attention check), then
 for each caselet: the context and five first answers; then the AI advice
 under each decision, the five final answers (the first answers start
 selected) and an optional confidence rating and reason. Last questions and
@@ -217,8 +225,14 @@ minus first. The ability score is the mean first-answer caselet score; the
 CSV also carries the leave-one-caselet-out version.
 
 **What respondents never see.** The key, the preferred action, the advice
-level and its score. The caselet illustration belongs to the caselet, uses
-none of the action colours, and says nothing about any decision.
+level and its score. The four actions share one neutral style, so no colour
+suggests an answer. The caselet illustration belongs to the caselet and
+says nothing about any decision.
+
+**Attention check.** The two practice questions each have one answer a
+careful reader cannot miss. The results view says who failed and has a box
+to leave them out of every statistic; the CSV keeps everyone, with an
+`attention_check_passed` column.
 
 ## Documentation
 

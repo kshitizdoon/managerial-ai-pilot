@@ -84,7 +84,7 @@ test("CSV: one row per person and decision, with the manual's fields", () => {
   assert.equal(row.ai_action, "delegate");
   assert.match(row.ai_text, /^Lead has the most direct knowledge/);
   assert.equal(row.first_score, "20");
-  assert.equal(row.instrument_version, "survey-2026-10-round2");
+  assert.equal(row.instrument_version, "survey-2026-10-round3");
 });
 
 test("CSV quotes values with commas, quotes and newlines", () => {

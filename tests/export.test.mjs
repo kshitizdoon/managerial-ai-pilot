@@ -66,7 +66,7 @@ test("CSV instrument columns: recorded and scored-with hashes", () => {
   assert.deepEqual(head.slice(-6), ["instrument_version", "scoring_version", "recorded_cases_hash",
     "recorded_key_hash", "scored_with_cases_hash", "scored_with_key_hash"]);
   const now = run("instrumentMeta()");
-  assert.deepEqual(lines[1].split(",").slice(-6), ["survey-2026-10-round2", "2", now.casesHash, now.keyHash, now.casesHash, now.keyHash]);
+  assert.deepEqual(lines[1].split(",").slice(-6), ["survey-2026-10-round3", "2", now.casesHash, now.keyHash, now.casesHash, now.keyHash]);
 });
 
 test("instrument table names versions and flags re-scoring", () => {
@@ -76,7 +76,7 @@ test("instrument table names versions and flags re-scoring", () => {
   const nostamp = makeRecord(site, { pid: "nostamp" });
   delete nostamp.instrument;
   const html = run(`instrumentTable(${J([cur, other, nostamp])})`);
-  assert.match(html, /survey-2026-10-round2[\s\S]*yes/);
+  assert.match(html, /survey-2026-10-round3[\s\S]*yes/);
   assert.match(html, /survey-older[\s\S]*no, re-scored with the current key/);
   assert.match(html, /not recorded/);
   assert.match(html, /1 completed response was collected under a different version/);

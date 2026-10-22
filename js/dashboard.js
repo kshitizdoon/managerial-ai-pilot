@@ -86,8 +86,13 @@ function decisionRows(per){
 
 const LEVEL_NAMES = {high: "High", moderate: "Moderate", low: "Low", very_low: "Very low"};
 
-function renderDashboard(raw, live, sources){
-  const per = personRows(raw);
+/* opts.excludeFailed leaves respondents who failed the attention check
+   (the two practice questions) out of every statistic on the page. */
+function renderDashboard(raw, live, sources, opts){
+  opts = opts || {};
+  const allPer = personRows(raw);
+  const failed = allPer.filter(p => p.practiceCorrect === false);
+  const per = opts.excludeFailed ? allPer.filter(p => p.practiceCorrect !== false) : allPer;
   const N = per.length;
   const byState = s => raw.filter(r => r && r.pid && recordState(r) === s);
   const incomplete = byState("in_progress"), anomalous = byState("anomalous"), earlier = byState("earlier_instrument");
@@ -114,8 +119,9 @@ function renderDashboard(raw, live, sources){
      ${earlier.map(r => `<tr><td>${esc(r.pid)}</td><td>${r.done ? "yes" : "no"}</td><td>${when(r)}</td><td>${esc((sources && sources[r.pid]) || "—")}</td></tr>`).join("")}
    </table></div>` : "";
   const versionRows = instrumentTable(raw.filter(r => recordState(r) !== "earlier_instrument"));
-  const counts = `${N} completed response${N === 1 ? "" : "s"}; ${incomplete.length} unfinished; ${anomalous.length} marked finished but incomplete` +
-    (earlier.length ? `; ${earlier.length} from an earlier version` : "");
+  const counts = `${allPer.length} completed response${allPer.length === 1 ? "" : "s"}; ${incomplete.length} unfinished; ${anomalous.length} marked finished but incomplete` +
+    (earlier.length ? `; ${earlier.length} from an earlier version` : "") +
+    (opts.excludeFailed && failed.length ? `; ${failed.length} left out of the statistics for failing the attention check` : "");
   const rawButton = raw.length
     ? `<p><button class="ghost" id="json">Download raw JSON, every record as saved (${raw.length})</button></p>
        <p class="small muted">The raw file holds every record, finished or not, exactly as saved, including any names and mobile numbers participants gave.</p>` : "";
@@ -128,17 +134,21 @@ function renderDashboard(raw, live, sources){
      <button class="ghost" id="clr">Clear added responses</button>
      <span class="small muted" id="addmsg"></span></p>
    </div>`;
-  const statusBlocks = `${incompleteRows}${anomalousRows}${earlierRows}${versionRows}`;
+  const attention = allPer.length ? `
+   <h2>Attention check</h2>
+   <p class="small muted" id="attn">${allPer.length - failed.length} of ${allPer.length} completed respondents answered both practice questions as expected.${failed.length ? ` Failed: ${failed.map(p => esc(p.pid)).join(", ")}.` : ""}</p>
+   ${failed.length ? `<p class="small"><label><input type="checkbox" id="exclAttn"${opts.excludeFailed ? " checked" : ""}> Leave the ${failed.length} who failed it out of the statistics below</label></p>` : ""}` : "";
+  const statusBlocks = `${incompleteRows}${anomalousRows}${earlierRows}${versionRows}${attention}`;
 
   if(!N){
     paint(`<h1>Survey results</h1>
-      <p>No completed responses yet${live && !live.ok ? ` — and the live data could not be loaded (${esc(live.why)}). Check the key in this link and DASHBOARD_KEY in Netlify.` : "."}</p>
+      <p>${allPer.length ? "No completed response is left once those who failed the attention check are left out" : "No completed responses yet"}${live && !live.ok ? ` — and the live data could not be loaded (${esc(live.why)}). Check the key in this link and DASHBOARD_KEY in Netlify.` : "."}</p>
       ${raw.length ? `<p class="muted" id="counts">${counts}.</p>` : ""}
       ${statusBlocks}
       ${rawButton}
       ${importUI}
       <p class="small muted"><a href="#" id="back">Back to the survey</a></p>`, true);
-    return wireDash(per, raw, sources);
+    return wireDash(allPer, raw, sources, live, opts);
   }
 
   const J = CASES.length;
@@ -203,7 +213,7 @@ function renderDashboard(raw, live, sources){
   if(N >= 4){
     if(!(alpha > 0.4)) flags.push(`Cronbach's alpha over the six case scores is ${fmt(alpha,2)}. The caselets are not yet measuring one thing; look at the decisions with low item-rest correlations first.`);
     if(med(times) > 25) flags.push(`Median run time is ${fmt(med(times))} minutes. Expect drop-out in the main run unless caselets are cut or shortened.`);
-    if(Number.isFinite(practiceRate) && practiceRate < 70) flags.push(`Only ${pct(practiceRate)} got the Wait/Hold practice question right. The distinction is not landing; look at the instructions before the main run.`);
+    if(Number.isFinite(practiceRate) && practiceRate < 70) flags.push(`Only ${pct(practiceRate)} answered both Wait/Hold practice questions as expected. Either the distinction is not landing or people are not reading; look at the instructions before the main run.`);
     const hiTook = levelStats[0].took, loTook = levelStats[3].took;
     if(Number.isFinite(hiTook) && Number.isFinite(loTook) && Math.abs(hiTook - loTook) < 5)
       flags.push(`People switch to the AI's action at almost the same rate for high and very low advice (${pct(hiTook)} against ${pct(loTook)}). Either the advice quality is not visible or it is read as authority.`);
@@ -225,7 +235,7 @@ function renderDashboard(raw, live, sources){
      <div><b>${fmt(mean(per.map(p=>p.mda)))}</b><span>mean ability score (0-100)</span></div>
      <div><b>${fmt(sd(per.map(p=>p.mda)))}</b><span>SD between people</span></div>
      <div><b>${fmt(alpha,2)}</b><span>alpha, 6 caselets</span></div>
-     <div><b>${pct(practiceRate)}</b><span>practice right</span></div>
+     <div><b>${pct(practiceRate)}</b><span>passed attention check</span></div>
    </div>
 
    <h2>Is the instrument measuring one thing?</h2>
@@ -287,16 +297,17 @@ function renderDashboard(raw, live, sources){
 
    <h2>Data</h2>
    <p><button class="ghost" id="csv">Download CSV, one row per person and decision</button></p>
-   <p class="small muted">The CSV is the analysis file: completed responses only, scored with the key deployed now.</p>
+   <p class="small muted">The CSV is the analysis file: every completed response, scored with the key deployed now, with an attention_check_passed column to filter on.</p>
    ${rawButton}
    ${importUI}
    <p class="small muted" style="margin-top:1.6rem"><a href="#" id="back">Back to the survey</a></p>`, true);
 
-  wireDash(per, raw, sources);
+  wireDash(allPer, raw, sources, live, opts);
 }
 
-function wireDash(per, raw, sources){
+function wireDash(per, raw, sources, live, opts){
   const $ = id => document.getElementById(id);
+  if($("exclAttn")) $("exclAttn").onchange = e => renderDashboard(raw, live, sources, {...(opts || {}), excludeFailed: e.target.checked});
   if($("csv")) $("csv").onclick = () => downloadFile("survey-decisions.csv", toCSV(per), "text/csv");
   if($("json")) $("json").onclick = () => downloadFile("survey-raw.json", JSON.stringify(rawExport(raw, sources), null, 1), "application/json");
   if($("addr")) $("addr").onclick = () => {
@@ -387,7 +398,7 @@ function list(title, items){
    respondent, case, decision, first, final and AI action, AI condition
    and level, the exact AI text, response times, confidence, and the
    scoring-key version. */
-const CSV_HEAD = ["pid","ai_condition","programme","experience","managed","ai_use","undergrad","cat","practice_correct",
+const CSV_HEAD = ["pid","ai_condition","programme","experience","managed","ai_use","undergrad","cat","attention_check_passed",
   "case_id","case_name","case_position","decision_id","decision_name","decision_position","preferred_action",
   "first_action","final_action","ai_action","ai_level","first_score","final_score","ai_action_score",
   "changed","disagreed_with_ai","took_ai",
