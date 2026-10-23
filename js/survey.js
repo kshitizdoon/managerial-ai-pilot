@@ -228,12 +228,21 @@ function definitionsHTML(){
     `<div data-a="${k}"><dt>${n}</dt><dd>${esc(def)}</dd></div>`).join("")}</dl>`;
 }
 
+/* who decides, and when: the four actions on two questions */
+function whoWhenHTML(){
+  return `<table class="whowhen"><thead><tr><th></th><th>Who decides?</th><th>When?</th></tr></thead><tbody>
+    ${ACTIONS.map(([k, n,,, who, when]) => `<tr data-a="${k}"><th scope="row">${n}</th><td>${esc(who)}</td><td>${esc(when)}</td></tr>`).join("")}
+  </tbody></table>
+  <p class="example">${esc(OWN_VS_DELEGATE)}</p>`;
+}
+
 function howItWorks(){
   setStep("How it works", 7);
   paint(`
    <h2>How it works</h2>
    <div class="card serif">
      <p style="margin-top:0">${esc(INSTRUCTIONS)}</p>
+     ${whoWhenHTML()}
      ${definitionsHTML()}
    </div>
    <p class="small muted">Your first answers in each situation are saved before you see the AI advisor, and cannot be changed afterwards. You can still choose different final answers.</p>
@@ -242,14 +251,15 @@ function howItWorks(){
 }
 
 /* ------------------------------------------------------------- practice */
-/* One practice screen on Wait versus Hold. Not scored; the answers and
-   whether they matched are kept, as a comprehension check. */
+/* One practice screen, two questions on Wait versus Hold. Not scored.
+   The answers and whether they matched are kept: both right is the
+   attention check. */
 function practice(){
   setStep("Practice", 9);
   const n = PRACTICE.items.length;
   paint(`
    <h2>Practice</h2>
-   <p class="muted">One practice question before the first situation. It is not scored.</p>
+   <p class="muted">Two practice questions before the first situation. They are not scored, but please read them carefully.</p>
    <div class="decisions">${PRACTICE.items.map((d, i) =>
      decisionCard(d, `Practice ${i+1} of ${n}`, "p")).join("")}</div>
    <div id="fb" class="card hide"><p style="margin:0" class="serif">${esc(PRACTICE.feedback)}</p></div>
@@ -262,7 +272,9 @@ function practice(){
     if(!checked){
       if(!requireAll(PRACTICE.items, ans)) return;
       checked = true;
+      /* the attention check: both answers right */
       ST.practice = {answers: ans, correct: PRACTICE.items.every(d => ans[d.k] === d.answer),
+                     itemCorrect: Object.fromEntries(PRACTICE.items.map(d => [d.k, ans[d.k] === d.answer])),
                      ms: since(), times: t()};
       app().querySelectorAll(".decision input").forEach(x => { x.disabled = true; });
       document.getElementById("fb").classList.remove("hide");
@@ -327,8 +339,9 @@ function situationHeader(c){
        <h2>${esc(c.name)}</h2>
        <p class="when">${esc(c.when)}</p></div>
    </header>
+   ${(c.facts || []).length ? `<ul class="facts">${c.facts.map(([v, l]) => `<li><b>${esc(v)}</b><span>${esc(l)}</span></li>`).join("")}</ul>` : ""}
    <p class="opening serif">${esc(c.opening)}</p>
-   <details class="help"><summary>What the four actions mean</summary>${definitionsHTML()}</details>`;
+   <details class="help"><summary>What the four actions mean</summary>${whoWhenHTML()}${definitionsHTML()}</details>`;
 }
 
 /* one decision with its four actions. extra goes between the text and
@@ -338,6 +351,7 @@ function decisionCard(d, kicker, prefix, extra, legend){
     <p class="kicker">${esc(kicker)}</p>
     <h3>${esc(d.n)}</h3>
     <p class="text serif">${esc(d.t)}</p>
+    ${d.q ? `<p class="ask"><b>To decide:</b> ${esc(d.q)}</p>` : ""}
     ${extra || ""}
     <fieldset class="acts"><legend class="${legend ? "lg" : "sr"}">${legend || "Your answer"}</legend>
       ${ACTIONS.map(([a, n, gloss]) =>

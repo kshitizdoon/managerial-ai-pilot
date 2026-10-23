@@ -191,3 +191,39 @@ test("an unfinished response from the earlier survey is kept and a fresh one sta
   assert.equal(srv.saveSeq, 4);
   assert.deepEqual(srv.cases, old.cases, "old answers sent unchanged");
 });
+
+test("how it works shows who decides and when, and the Own-versus-Delegate example", async () => {
+  const page = await env.newPage();
+  await page.goto(env.base + "/?new=1");
+  await page.click("#begin");
+  for (let i = 1; i <= 5; i++) await page.selectOption("#q" + i, { index: 1 });
+  await page.click("#next");
+  const rows = await page.$$eval(".whowhen tbody tr", t => t.map(r => [...r.children].map(c => c.textContent)));
+  assert.deepEqual(rows, [["Own", "You", "Now"], ["Delegate", "A team member, not you", "Now"],
+    ["Wait", "You", "Later. Nothing is missing"], ["Hold", "No one yet", "Once something missing is in place"]]);
+  assert.match(await page.textContent(".example"), /refund/);
+});
+
+test("each caselet shows its key numbers and, under every decision, what is to be decided", async () => {
+  const page = await env.newPage();
+  await playSurvey(page, env.base, { stopAfterCases: 0, finish: false });
+  const name = await page.textContent(".sit h2");
+  const c = nrun(`(() => { const c = CASES.find(c => c.name === ${JSON.stringify(name)}); return {facts: c.facts, q: c.decisions.map(d => d.q)}; })()`);
+  assert.deepEqual(await page.$$eval(".facts li", e => e.map(x => [x.querySelector("b").textContent, x.querySelector("span").textContent])), c.facts);
+  assert.deepEqual(await page.$$eval(".decision .ask", e => e.map(x => x.textContent)), c.q.map(q => "To decide: " + q));
+});
+
+test("the four actions look the same when selected: no colour per action", async () => {
+  const page = await env.newPage();
+  await playSurvey(page, env.base, { stopAfterCases: 0, finish: false });
+  const keys = await page.$$eval(".decision", e => e.map(x => x.dataset.k));
+  const acts = ["own", "delegate", "wait", "hold"];
+  for (let i = 0; i < 4; i++) await page.click(`input[name="a-${keys[i]}"][value=${acts[i]}]`);
+  await page.waitForTimeout(400);                              // let the 0.12 s style transition finish
+  const styles = await page.$$eval(".act.on", e => e.map(x => { const s = getComputedStyle(x), b = getComputedStyle(x.querySelector("b"));
+    return [s.backgroundColor, s.borderTopColor, s.boxShadow, b.color].join("|"); }));
+  assert.equal(styles.length, 4);
+  assert.equal(new Set(styles).size, 1, "selected options differ by action: " + styles.join(" / "));
+  const unselected = await page.$$eval(".decision:nth-child(1) .act:not(.on) b", e => e.map(x => getComputedStyle(x).color));
+  assert.equal(new Set(unselected).size, 1);
+});

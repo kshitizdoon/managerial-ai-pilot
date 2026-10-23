@@ -7,7 +7,7 @@ box.window = box; vm.createContext(box);
 ["js/config.js","js/cases.js","js/key.js","js/order.js","js/scoring.js"].forEach(f =>
   vm.runInContext(fs.readFileSync(f,"utf8"), box, {filename:f}));
 const run = s => vm.runInContext(s, box);
-const {CASES, KEY, ACTIONS, INSTRUCTIONS, PRACTICE, CONFIG} = box;
+const {CASES, KEY, ACTIONS, INSTRUCTIONS, PRACTICE, CONFIG, OWN_VS_DELEGATE} = box;
 const LEVELS = run("AI_LEVELS"), LEVEL_NAME = {high:"High", moderate:"Moderate", low:"Low", very_low:"Very low"};
 const label = a => (ACTIONS.find(x => x[0] === a) || [a, a])[1];
 const meta = run("instrumentMeta()");
@@ -17,15 +17,28 @@ L.push("# Instrument\n");
 L.push("Generated from `js/cases.js`, `js/key.js` and `js/scoring.js`. Do not edit by hand; run `node make-docs.js`.\n");
 L.push(`Instrument version \`${meta.instrumentVersion}\`, cases \`${meta.casesHash}\`, key \`${meta.keyHash}\`, scoring v${meta.scoringVersion}.\n`);
 
+L.push("## Changes from the manual\n");
+L.push("The text follows the 8 October 2026 manual, with the pilot feedback of 22 October 2026 applied:\n");
+L.push("- Every decision states what is to be decided (\"To decide:\" below each decision).");
+L.push("- Each caselet shows its key numbers as tiles above the opening. They restate the opening; nothing new.");
+L.push("- Launch Morning / Opening readiness: \"the advertised class schedule\" now reads \"the group exercise classes advertised for this afternoon\".");
+L.push("- Every AI reason for a non-preferred action is specific to its decision. The manual used four generic sentences there, which gave weak advice away. The actions recommended at each level, and the key, are unchanged.");
+L.push("- The instructions add a who-decides / when grid and an Own-versus-Delegate example. The four actions share one neutral style; no action has a colour.\n");
+
 L.push("## Instructions respondents read\n");
 L.push(INSTRUCTIONS + "\n");
+L.push("| Action | Who decides? | When? |");
+L.push("| --- | --- | --- |");
+ACTIONS.forEach(([, n,,, who, when]) => L.push(`| ${n} | ${who} | ${when} |`));
+L.push("\n" + OWN_VS_DELEGATE + "\n");
 L.push("| Action | Shown on each option | Definition |");
 L.push("| --- | --- | --- |");
 ACTIONS.forEach(([, n, gloss, def]) => L.push(`| ${n} | ${gloss} | ${def} |`));
 L.push("");
 
-L.push("## Practice question (Wait versus Hold, not scored)\n");
-PRACTICE.items.forEach(i => L.push(`- **${i.n}** (expected: ${label(i.answer)}). ${i.t}`));
+L.push("## Practice questions and attention check (Wait versus Hold, not scored)\n");
+L.push("Both answered as expected counts as passing the attention check; the results view can leave out those who fail.\n");
+PRACTICE.items.forEach(i => L.push(`- **${i.n}** (expected: ${label(i.answer)}). ${i.t} To decide: ${i.q}`));
 L.push(`\nFeedback shown after answering: ${PRACTICE.feedback}\n`);
 
 L.push("## Order and AI advice assignment\n");
@@ -47,8 +60,9 @@ L.push("");
 CASES.forEach(c => {
   L.push(`## ${c.name} (case ${c.id})\n`);
   L.push(`*${c.when}*\n`);
+  L.push((c.facts || []).map(([v, l]) => `**${v}** ${l}`).join(" · ") + "\n");
   L.push(`${c.opening}\n`);
-  c.decisions.forEach((d, i) => L.push(`${i+1}. **${d.n}** (\`${d.k}\`). ${d.t}`));
+  c.decisions.forEach((d, i) => L.push(`${i+1}. **${d.n}** (\`${d.k}\`). ${d.t} *To decide:* ${d.q}`));
   L.push("\n**Key**\n");
   L.push("| Decision | Own | Delegate | Wait | Hold | Preferred |");
   L.push("| --- | --- | --- | --- | --- | --- |");

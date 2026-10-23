@@ -48,7 +48,7 @@ window.CONFIG = {
      response and never changed afterwards. Give it a new name whenever
      you edit cases.js, key.js or the scoring, so responses collected
      under different versions can be told apart.                          */
-  instrumentVersion: "survey-2026-10-round2",
+  instrumentVersion: "survey-2026-10-round3",
 
   /* ---- Copy ------------------------------------------------------------ */
   studyTitle: "Managerial Decision Survey",

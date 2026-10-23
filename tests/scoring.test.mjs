@@ -12,6 +12,15 @@ const run = src => plain(site.run(src));
 /* parsed from Managerial_Decision_Survey_Manual_v3_round2 (tracked changes accepted) */
 const MANUAL = JSON.parse(fs.readFileSync(path.join(ROOT, "tests/fixtures/manual-2026-10-08.json"), "utf8"));
 const LEVEL = { high: "high", moderate: "moderate", low: "low", very_low: "very_low" };
+/* the only places the text may differ from the manual (pilot feedback, 22 October 2026) */
+const TEXT_CHANGES = { "Launch Morning/Opening readiness":
+  ["the advertised class schedule.", "the group exercise classes advertised for this afternoon."] };
+/* the manual's four generic reasons, which gave weak advice away */
+const GENERIC = [
+  "The potential consequences justify direct managerial involvement despite competing demands.",
+  "A capable lead can take responsibility while the manager preserves attention for other commitments.",
+  "The manager can revisit this decision after addressing more immediate matters.",
+  "A further check would reduce the risk of committing too early."];
 
 test("six caselets in the manual's order, with stable ids", () => {
   assert.deepEqual(run("CASES.map(c => [c.id, c.name])"), [
@@ -20,15 +29,38 @@ test("six caselets in the manual's order, with stable ids", () => {
   assert.deepEqual(run("CASES.map(c => c.decisions.length)"), [5, 5, 5, 5, 5, 5]);
 });
 
-test("caselet text matches the manual word for word", () => {
+test("caselet text matches the manual word for word, apart from the declared changes", () => {
   const cases = run("CASES");
   MANUAL.cases.forEach((m, i) => {
     const c = cases[i];
     assert.equal(c.name, m.name);
     assert.equal(c.when, m.when, m.name + " time");
     assert.equal(c.opening, m.opening, m.name + " opening");
-    assert.deepEqual(c.decisions.map(d => [d.n, d.t]), m.decisions.map(d => [d.n, d.t]), m.name + " decisions");
+    const want = m.decisions.map(d => {
+      const ch = TEXT_CHANGES[m.name + "/" + d.n];
+      return [d.n, ch ? d.t.replace(ch[0], ch[1]) : d.t];
+    });
+    assert.deepEqual(c.decisions.map(d => [d.n, d.t]), want, m.name + " decisions");
   });
+  assert.match(run(`caseById(1).decisions.find(d => d.k === "readiness").t`), /group exercise classes advertised for this afternoon\.$/);
+  assert.doesNotMatch(JSON.stringify(cases), /class schedule/);
+});
+
+test("every decision says what is to be decided", () => {
+  const qs = run("CASES.flatMap(c => c.decisions.map(d => d.q))");
+  assert.equal(qs.length, 30);
+  assert.ok(qs.every(q => typeof q === "string" && q.length > 15 && /\.$/.test(q) && q[0] === q[0].toLowerCase()), "lower-case clauses ending in a full stop");
+  assert.equal(new Set(qs).size, 30, "each one is different");
+  assert.equal(run(`caseById(1).decisions.find(d => d.k === "readiness").q`), "whether to confirm the noon opening and this afternoon's classes as planned.");
+  /* no label words that would point at an answer */
+  assert.ok(qs.every(q => !/\b(own|delegate|wait|hold|urgent|later)\b/i.test(q)), "no action words in the questions");
+});
+
+test("every caselet shows two or three key numbers, Fest Week as asked", () => {
+  const f = run("CASES.map(c => [c.name, c.facts])");
+  f.forEach(([n, facts]) => assert.ok(facts.length >= 2 && facts.length <= 3, n));
+  assert.deepEqual(f.find(x => x[0] === "Fest Week")[1],
+    [["3 weeks", "festival opens"], ["Next week", "registrations close"], ["3 hours", "available today for involvement"]]);
 });
 
 test("instructions and the four definitions match the manual", () => {
@@ -50,13 +82,43 @@ test("key matches the manual for all 30 decisions", () => {
   });
 });
 
-test("AI advice matches the manual: action and reason, every level, every decision", () => {
+test("AI advice: the manual's action everywhere, and its reason wherever the action is the preferred one", () => {
   MANUAL.cases.forEach((m, i) => {
     for (const l of Object.keys(LEVEL)) {
       const got = run(`(() => { const c = CASES[${i}], p = aiPlan(c, "${l}"); return c.decisions.map(d => [d.n, p.actions[d.k], p.why[d.k]]); })()`);
-      assert.deepEqual(got, MANUAL.ai[m.name][l].map(x => [x.n, x.action, x.why]), `${m.name} ${l}`);
+      MANUAL.ai[m.name][l].forEach((x, j) => {
+        assert.equal(got[j][0], x.n);
+        assert.equal(got[j][1], x.action, `${m.name} ${l} ${x.n} action`);
+        if (x.action === MANUAL.key[m.name][j].preferred) assert.equal(got[j][2], x.why, `${m.name} ${l} ${x.n} reason`);
+      });
     }
   });
+});
+
+test("weak advice is as specific as good advice: no generic reasons, one reason per decision and action", () => {
+  const all = run(`CASES.flatMap(c => c.decisions.flatMap(d => AI_LEVELS.map(l => [c.id, d.k, c.ai[l][d.k][0], c.ai[l][d.k][1], preferredAction(c.id, d.k)])))`);
+  for (const g of GENERIC) assert.ok(!all.some(x => x[3] === g), "generic reason still used: " + g);
+  /* the same decision and action always get the same reason, at every level */
+  const byPair = {};
+  all.forEach(([id, k, a, why]) => { const key = id + k + a; (byPair[key] = byPair[key] || new Set()).add(why); });
+  assert.ok(Object.values(byPair).every(s => s.size === 1));
+  /* different decisions never share a reason */
+  const reasons = Object.values(byPair).map(s => [...s][0]);
+  assert.equal(new Set(reasons).size, reasons.length);
+  /* lengths: wrong reasons sit inside the range of right ones, not far below it */
+  const words = t => t.split(/\s+/).length;
+  const right = all.filter(x => x[2] === x[4]).map(x => words(x[3])), wrong = all.filter(x => x[2] !== x[4]).map(x => words(x[3]));
+  const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
+  assert.ok(Math.min(...wrong) >= Math.min(...right), "no wrong reason shorter than the shortest right one");
+  assert.ok(Math.abs(mean(wrong) - mean(right)) < 6, `mean length right ${mean(right).toFixed(1)}, wrong ${mean(wrong).toFixed(1)}`);
+});
+
+test("instructions: who decides and when, plus the Own-versus-Delegate example", () => {
+  assert.deepEqual(run("ACTIONS.map(a => [a[1], a[4], a[5]])"), [
+    ["Own", "You", "Now"], ["Delegate", "A team member, not you", "Now"],
+    ["Wait", "You", "Later. Nothing is missing"], ["Hold", "No one yet", "Once something missing is in place"]]);
+  assert.match(run("OWN_VS_DELEGATE"), /that is Own[\s\S]*that is Delegate/);
+  assert.deepEqual(run("ACTIONS.map(a => a[2])"), ["you decide, now", "a team member decides, now", "you decide, later", "not yet, something essential is missing"]);
 });
 
 test("AI advice scores 94 / 74 / 48 / 22 with 4 / 3 / 2 / 0 preferred actions in every caselet", () => {
