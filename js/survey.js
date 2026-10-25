@@ -45,7 +45,22 @@ function startSurvey(){
     try{ history.replaceState(null, "", location.pathname + (q ? "?" + q : "") + location.hash); }catch(e){}
     return startFresh();
   }
+  /* ?evaluate=PID: Part 2 for someone who finished Part 1 earlier, perhaps
+     on another device. The server checks that PID finished Part 1. */
+  if(url.has("evaluate")){
+    const pid = String(url.get("evaluate") || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
+    url.delete("evaluate");
+    const q = url.toString();
+    try{ history.replaceState(null, "", location.pathname + (q ? "?" + q : "") + location.hash); }catch(e){}
+    if(pid){
+      const ev = evLoad();
+      return evResume(ev && ev.pid === pid ? ev : {pid, stage:"evaluator"});
+    }
+  }
   const saved = loadLocal();
+  /* Part 2 under way for a PID whose Part 1 is not on this device */
+  const ev = evLoad();
+  if(ev && ev.pid && !ev.declined && (!saved || saved.pid !== ev.pid) && (ev.view || ev.done || ev.unavailable)) return evResume(ev);
   if(saved && saved.done){
     ST = saved;
     /* a finished response whose last save failed: try again quietly */
@@ -97,6 +112,7 @@ function startFresh(){
     archiveLocal();
   }
   clearLocal();
+  evClear();          // Part 2 belongs to the previous person; it is already on the server
   ST = null;
   window.__contact = null;
   welcome();
@@ -164,6 +180,7 @@ function welcome(){
      <p>Please do it in one sitting, without breaks and without looking anything up.</p>
      <p>Your answers are used for a student research project at IIM Ahmedabad. You are not asked who you are while you work through the situations.</p>
      <p>At the end you can leave a name and mobile number to enter the prize draw. That is optional, and if you give it, it is saved with your answers rather than kept apart from them.</p>
+     <p>Your decisions may later be shown to other participants in this study, who will be asked to rate them. They will never see your name, contact details or answers about yourself.</p>
      <p style="margin:0">There are no trick questions and no right answer you are expected to guess.</p>
    </div>
    ${CONFIG.contactAt === "start" ? contactHTML() : ""}
@@ -211,6 +228,9 @@ function background(){
       order,
       at: 0, cases: {}, msBg: since(), done: false,
       contact: window.__contact || null,
+      /* what the welcome screen told this person, including that their
+         decisions may be shown, anonymously, to other participants */
+      consent: {version: CONFIG.consentVersion, reuseForEvaluation: true},
       /* set once here, never changed: which cases, key and scoring this
          response was collected under */
       schemaVersion: RECORD_SCHEMA,
@@ -529,6 +549,8 @@ function failReason(rec){
 }
 
 function thanks(){
+  /* Part 2, when it is switched on, follows a saved Part 1 */
+  if(ST.savedVia && evaluatorOffer(ST)) return;
   setStep("Done", 100);
   const ok = !!ST.savedVia;
   paint(`

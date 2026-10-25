@@ -5,7 +5,7 @@
 async function showDashboard(key){
   setStep("Results", 100);
   paint(`<h1>Survey results</h1><p class="muted">Loading…</p>`, true);
-  const live = await fetchResponses(key);
+  const [live, ev] = await Promise.all([fetchResponses(key), fetchEvaluatorData(key)]);
   /* One record per PID. A finished copy beats an unfinished one, then the
      newer checkpoint wins. So a participant's emailed backup replaces the
      unfinished server record it completes. The device archive holds
@@ -19,7 +19,7 @@ async function showDashboard(key){
   const rows = mergeRecords(...lists.map(l => l[1]));
   const sources = {};
   rows.forEach(r => { sources[r.pid] = from.get(r) || "unknown"; });
-  renderDashboard(rows, live, sources);
+  renderDashboard(rows, live, sources, {ev});
 }
 
 /* complete            this instrument, finished, every decision answered
@@ -146,6 +146,7 @@ function renderDashboard(raw, live, sources, opts){
       ${raw.length ? `<p class="muted" id="counts">${counts}.</p>` : ""}
       ${statusBlocks}
       ${rawButton}
+      ${evaluatorSection(opts.ev)}
       ${importUI}
       <p class="small muted"><a href="#" id="back">Back to the survey</a></p>`, true);
     return wireDash(allPer, raw, sources, live, opts);
@@ -299,6 +300,7 @@ function renderDashboard(raw, live, sources, opts){
    <p><button class="ghost" id="csv">Download CSV, one row per person and decision</button></p>
    <p class="small muted">The CSV is the analysis file: every completed response, scored with the key deployed now, with an attention_check_passed column to filter on.</p>
    ${rawButton}
+   ${evaluatorSection(opts.ev)}
    ${importUI}
    <p class="small muted" style="margin-top:1.6rem"><a href="#" id="back">Back to the survey</a></p>`, true);
 
@@ -310,6 +312,9 @@ function wireDash(per, raw, sources, live, opts){
   if($("exclAttn")) $("exclAttn").onchange = e => renderDashboard(raw, live, sources, {...(opts || {}), excludeFailed: e.target.checked});
   if($("csv")) $("csv").onclick = () => downloadFile("survey-decisions.csv", toCSV(per), "text/csv");
   if($("json")) $("json").onclick = () => downloadFile("survey-raw.json", JSON.stringify(rawExport(raw, sources), null, 1), "application/json");
+  const ev = (opts || {}).ev;
+  if($("evcsv")) $("evcsv").onclick = () => downloadFile("evaluator-ratings.csv", toEvaluatorCSV(evaluatorRows(ev)), "text/csv");
+  if($("evjson")) $("evjson").onclick = () => downloadFile("evaluator-raw.json", JSON.stringify(evaluatorRawExport(ev), null, 1), "application/json");
   if($("addr")) $("addr").onclick = () => {
     const txt = $("paste").value.trim(); const msg = $("addmsg");
     let rows = [];
@@ -429,4 +434,119 @@ function toCSV(per){
       return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; }).join(","));
   });
   return lines.join("\n");
+}
+
+/* =============================================================
+   Part 2: the Evaluator stage. Kept apart from the Producer results
+   above: its own records, its own counts, its own downloads. Linked to
+   Producer records only through the assignment's target PIDs.
+   ============================================================= */
+
+async function fetchEvaluatorData(key){
+  try{
+    const r = await fetch(CONFIG.evaluatorPath + "?key=" + encodeURIComponent(key || ""));
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok) return {ok:false, why:"status " + r.status + (j.error ? " — " + j.error : "")};
+    return {ok:true, settings:j.settings || {}, pool:j.pool || null, assignments:j.assignments || [], evaluations:j.evaluations || []};
+  }catch(e){ return {ok:false, why:"no evaluator function on this host"}; }
+}
+
+/* same rule as the server (netlify/lib/eval-core.mjs): complete means
+   finished, with a rating and a confidence for every assigned person */
+function evaluationState(e, a){
+  if(!e || !e.done) return "in_progress";
+  if(!a || e.assignmentId !== a.id) return "anomalous";
+  return a.slots.every(s => e.items && e.items[s.token] && e.items[s.token].rating != null && e.items[s.token].conf != null)
+    ? "complete" : "anomalous";
+}
+
+/* one row per rating, complete evaluations only, joined to the target */
+function evaluatorRows(ev){
+  if(!ev || !ev.ok) return [];
+  const byPid = new Map(ev.assignments.map(a => [a.evaluatorPid, a]));
+  const rows = [];
+  ev.evaluations.forEach(e => {
+    const a = byPid.get(e.pid);
+    if(evaluationState(e, a) !== "complete") return;
+    const mine = a.slots.map(s => ({s, it: e.items[s.token]}));
+    const rs = mine.map(x => x.it.rating), m = mean(rs), v = sd(rs);
+    mine.forEach(({s, it}) => rows.push({
+      evaluatorPid: e.pid, assignmentId: a.id, position: s.position, condition: s.condition, stratum: s.stratum,
+      caseId: a.caseId, decisionIds: a.decisionIds, targetPid: s.target.pid, targetVersion: s.target.instrumentVersion,
+      targetKeyHash: s.target.keyHash, targetScoringVersion: s.target.scoringVersion,
+      aiLevel: s.target.aiLevel, aiCaseScore: s.target.aiCaseScore, mda: s.target.mda, mdaLoo: s.target.mdaLoo,
+      caseFirstScore: s.target.caseFirstScore, rating: it.rating, ratingZ: v > 0 ? (it.rating - m) / v : 0,
+      conf: it.conf, why: it.why || "", seconds: it.ms != null ? it.ms / 1000 : null, evaluatorMinutes: e.totalMin,
+      display: s.display
+    }));
+  });
+  return rows;
+}
+
+function evaluatorStats(rows){
+  return ["A", "B", "C"].map(cond => {
+    const r = rows.filter(x => x.condition === cond);
+    const rating = r.map(x => x.rating), loo = r.map(x => x.mdaLoo);
+    const hi = r.filter(x => x.stratum === "high").map(x => x.rating), lo = r.filter(x => x.stratum === "low").map(x => x.rating);
+    return {cond, n: r.length, mean: mean(rating), sd: sd(rating),
+      rLoo: corr(rating, loo), rFull: corr(rating, r.map(x => x.mda)), rZ: corr(r.map(x => x.ratingZ), loo),
+      mae: mean(r.map(x => Math.abs(x.rating - x.mdaLoo))), bias: mean(r.map(x => x.rating - x.mdaLoo)),
+      hiLo: hi.length && lo.length ? mean(hi) - mean(lo) : NaN,
+      conf: mean(r.map(x => x.conf)), seconds: med(r.map(x => x.seconds).filter(x => x != null))};
+  });
+}
+
+const COND_NAMES = {A: "A · final decisions only", B: "B · plus the AI advice received", C: "C · plus first decisions and changes"};
+
+function evaluatorSection(ev){
+  if(!ev) return "";
+  if(!ev.ok) return `<h2 id="evaluator">Part 2: Evaluator stage</h2><p class="small muted">Evaluator data could not be loaded (${esc(ev.why)}).</p>`;
+  const byPid = new Map(ev.assignments.map(a => [a.evaluatorPid, a]));
+  const states = ev.evaluations.map(e => ({e, a: byPid.get(e.pid), st: evaluationState(e, byPid.get(e.pid))}));
+  const complete = states.filter(x => x.st === "complete"), unfinished = states.filter(x => x.st !== "complete");
+  const assignedOnly = ev.assignments.filter(a => !ev.evaluations.some(e => e.pid === a.evaluatorPid));
+  const rows = evaluatorRows(ev), stats = evaluatorStats(rows);
+  const pool = ev.pool || {};
+  const reasons = Object.entries(pool.excluded || {}).map(([k, v]) => `${k.replace(/_/g, " ")} ${v}`).join(", ") || "none";
+  return `
+   <h2 id="evaluator">Part 2: Evaluator stage</h2>
+   <p class="muted" id="evcounts">${complete.length} completed evaluator${complete.length === 1 ? "" : "s"}; ${unfinished.length + assignedOnly.length} unfinished. Stage ${ev.settings.enabled ? "switched on" : "switched off"} (EVALUATOR_ENABLED).</p>
+   <p class="small muted" id="evpool">Eligible Producer records for evaluation: ${pool.eligible ?? "—"} of ${pool.total ?? "—"} (at least ${pool.minTargets ?? 3} needed). Excluded: ${esc(reasons)}.</p>
+   ${unfinished.length || assignedOnly.length ? `<div class="scroll"><table class="data" id="evunfinished">
+     <tr><th>PID</th><th>People rated</th><th>Status</th><th>Last checkpoint</th></tr>
+     ${unfinished.map(({e, a, st}) => `<tr><td>${esc(e.pid)}</td><td>${Object.values(e.items || {}).filter(x => x.rating != null).length}/${a ? a.slots.length : 3}</td><td>${st === "anomalous" ? "marked finished, but incomplete" : "in progress"}</td><td>${esc(e.receivedAt || "—")}</td></tr>`).join("")}
+     ${assignedOnly.map(a => `<tr><td>${esc(a.evaluatorPid)}</td><td>0/${a.slots.length}</td><td>assigned, nothing saved yet</td><td>${esc(a.createdAt)}</td></tr>`).join("")}
+   </table></div>
+   <p class="small muted">Unfinished evaluations are left out of every number below.</p>` : ""}
+   <div class="scroll"><table class="data" id="evconditions">
+     <tr><th>Condition</th><th>Ratings</th><th>Mean rating</th><th>SD</th><th>r with target ability (leave-one-out)</th><th>r, full ability</th><th>r, within-evaluator z</th><th>Mean abs. error</th><th>Mean error</th><th>High minus low third</th><th>Confidence</th><th>Median seconds</th></tr>
+     ${stats.map(x => `<tr><td>${COND_NAMES[x.cond]}</td><td>${x.n}</td><td>${fmt(x.mean)}</td><td>${fmt(x.sd)}</td><td>${fmt(x.rLoo,2)}</td><td>${fmt(x.rFull,2)}</td><td>${fmt(x.rZ,2)}</td><td>${fmt(x.mae)}</td><td>${fmt(x.bias)}</td><td>${fmt(x.hiLo)}</td><td>${fmt(x.conf)}</td><td>${fmt(x.seconds,0)}</td></tr>`).join("")}
+   </table></div>
+   <p class="small muted">Target ability is the target's pre-AI managerial decision-making ability (mean first-answer caselet score, 0-100), leaving out the caselet shown. Error compares the 0-100 rating with that score, so read it as calibration, not accuracy in a strict sense. Median evaluator time: ${fmt(med(complete.map(x => x.e.totalMin).filter(Number.isFinite)))} minutes.</p>
+   ${rows.length ? `<p><button class="ghost" id="evcsv">Download evaluator CSV, one row per rating</button></p>` : ""}
+   ${ev.assignments.length || ev.evaluations.length ? `<p><button class="ghost" id="evjson">Download evaluator raw JSON (assignments and records)</button></p>
+   <p class="small muted">The evaluator files name the target Producer by PID so the two stages can be joined. Keep them as private as the Producer files.</p>` : ""}`;
+}
+
+const EV_CSV_HEAD = ["evaluator_pid","assignment_id","position","condition","case_id","decision_ids","target_pid","target_ability_third",
+  "target_mda","target_mda_leave_one_out","target_case_first_score","target_instrument_version","target_key_hash","target_scoring_version",
+  "ai_level","ai_case_score","rating","rating_z_within_evaluator","confidence","explanation","seconds","evaluator_total_minutes","shown"];
+function toEvaluatorCSV(rows){
+  const r2 = x => Number.isFinite(x) ? Math.round(x * 100) / 100 : "";
+  const lines = [EV_CSV_HEAD.join(",")];
+  rows.forEach(x => {
+    const shown = x.display.decisions.map(d => d.k + ":" + (d.first ? d.first + ">" : "") + (d.ai ? "[ai " + d.ai.action + "]" : "") + d.final).join(" ");
+    const row = [x.evaluatorPid, x.assignmentId, x.position, x.condition, x.caseId, x.decisionIds.join(" "), x.targetPid, x.stratum,
+      r2(x.mda), r2(x.mdaLoo), x.caseFirstScore, x.targetVersion, x.targetKeyHash, x.targetScoringVersion,
+      x.aiLevel, x.aiCaseScore, x.rating, r2(x.ratingZ), x.conf, x.why, r2(x.seconds), x.evaluatorMinutes, shown];
+    lines.push(row.map(v => { const t = String(v == null ? "" : v);
+      return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(","));
+  });
+  return lines.join("\n");
+}
+function evaluatorRawExport(ev){
+  return {format: "inbasket-evaluator-raw", formatVersion: 1, exportedAt: new Date().toISOString(),
+    settings: ev && ev.settings, pool: ev && ev.pool,
+    assignments: JSON.parse(JSON.stringify((ev && ev.assignments) || [])),
+    evaluations: JSON.parse(JSON.stringify((ev && ev.evaluations) || []))};
 }
