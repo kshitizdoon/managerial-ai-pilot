@@ -9,7 +9,7 @@ import { makeRecord, earlierPilotRecord } from "./helpers/records.mjs";
 import * as core from "../netlify/lib/eval-core.mjs";
 
 const site = loadSite();
-const S = { enabled: true, minMinutes: 5, requireAttention: true, includeLegacyConsent: false, minTargets: 3 };
+const S = { enabled: true, minMinutes: 5, requireAttention: false, includeLegacyConsent: false, minTargets: 3 };
 const FIRSTS = ["pref", "own", "delegate", "wait", "hold"];
 
 /* a seeded random number generator, so assignments are reproducible */
@@ -34,7 +34,7 @@ test("pre-AI ability matches the dashboard's scoring, with and without the shown
   assert.equal(core.mda(makeRecord(site, { pid: "p", first: "pref" })), 100);
 });
 
-test("eligibility: only complete, valid, consented, attentive, unhurried records of this instrument", () => {
+test("eligibility: only complete, valid, consented, unhurried records of this instrument; the attention check is not required", () => {
   const ok = makeRecord(site, { pid: "ok" });
   const cases = [
     [ok, true, undefined],
@@ -43,7 +43,7 @@ test("eligibility: only complete, valid, consented, attentive, unhurried records
     [earlierPilotRecord("old"), false, "earlier_instrument"],
     [makeRecord(site, { pid: "fast", totalMin: 4.9 }), false, "too_fast"],
     [makeRecord(site, { pid: "edge", totalMin: 5 }), true, undefined],
-    [makeRecord(site, { pid: "inattentive", attention: false }), false, "failed_attention"],
+    [makeRecord(site, { pid: "inattentive", attention: false }), true, undefined],
     [makeRecord(site, { pid: "noconsent", consent: null }), false, "no_reuse_consent"],
     [makeRecord(site, { pid: "v1consent", consent: { version: 1, reuseForEvaluation: true } }), false, "no_reuse_consent"]
   ];
@@ -56,14 +56,14 @@ test("eligibility: only complete, valid, consented, attentive, unhurried records
   assert.equal(core.eligibility(noAi, S, null).reason, "no_ai_record");
   assert.equal(core.eligibility(ok, S, "ok").reason, "self", "never one's own record");
   assert.equal(core.eligibility(makeRecord(site, { pid: "nc", consent: null }), { ...S, includeLegacyConsent: true }, null).ok, true, "researcher can admit earlier consent");
-  assert.equal(core.eligibility(makeRecord(site, { pid: "ia", attention: false }), { ...S, requireAttention: false }, null).ok, true);
+  assert.equal(core.eligibility(makeRecord(site, { pid: "ia", attention: false }), { ...S, requireAttention: true }, null).reason, "failed_attention", "only if the researcher switches it on");
 });
 
 test("settings come from environment variables, off by default", () => {
-  assert.deepEqual(core.settings({}), { enabled: false, minMinutes: 5, requireAttention: true, includeLegacyConsent: false, minTargets: 3 });
-  assert.deepEqual(core.settings({ EVALUATOR_ENABLED: "1", EVALUATOR_MIN_PRODUCER_MINUTES: "8", EVALUATOR_REQUIRE_ATTENTION: "0",
+  assert.deepEqual(core.settings({}), { enabled: false, minMinutes: 5, requireAttention: false, includeLegacyConsent: false, minTargets: 3 });
+  assert.deepEqual(core.settings({ EVALUATOR_ENABLED: "1", EVALUATOR_MIN_PRODUCER_MINUTES: "8", EVALUATOR_REQUIRE_ATTENTION: "1",
     EVALUATOR_INCLUDE_LEGACY_CONSENT: "true", EVALUATOR_MIN_TARGETS: "12" }),
-    { enabled: true, minMinutes: 8, requireAttention: false, includeLegacyConsent: true, minTargets: 12 });
+    { enabled: true, minMinutes: 8, requireAttention: true, includeLegacyConsent: true, minTargets: 12 });
   assert.equal(core.settings({ EVALUATOR_MIN_TARGETS: "1" }).minTargets, 3, "never fewer than three");
 });
 

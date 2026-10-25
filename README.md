@@ -261,8 +261,7 @@ starting value), confidence (five points, no default), and may say what
 influenced them.
 
 **Who can be a target.** Only real, completed Producer records of this
-instrument that: took at least 5 minutes; passed the attention check;
-carry the AI advice they were shown; carry reuse consent (see below); and
+instrument that: took at least 5 minutes; carry the AI advice they were shown; carry reuse consent (see below); and
 are not the evaluator's own. Nothing is generated. Every action and every
 AI recommendation shown is copied from the target's record.
 
@@ -291,7 +290,7 @@ Part 2 section and its own CSV (one row per rating) and raw JSON.
 | --- | --- | --- |
 | `EVALUATOR_ENABLED` | off | `1` turns Part 2 on |
 | `EVALUATOR_MIN_PRODUCER_MINUTES` | 5 | shortest Producer run that can be a target |
-| `EVALUATOR_REQUIRE_ATTENTION` | on | `0` admits targets who failed the attention check |
+| `EVALUATOR_REQUIRE_ATTENTION` | off | `1` leaves out targets who failed the attention check |
 | `EVALUATOR_INCLUDE_LEGACY_CONSENT` | off | `1` admits Producers who saw the older consent text, only with approval |
 | `EVALUATOR_MIN_TARGETS` | 3 | eligible records needed before Part 2 starts |
 

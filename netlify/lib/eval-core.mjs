@@ -37,7 +37,8 @@ export function settings(env = (typeof process !== "undefined" ? process.env : {
     enabled: flag(env.EVALUATOR_ENABLED),
     minMinutes: env.EVALUATOR_MIN_PRODUCER_MINUTES != null && env.EVALUATOR_MIN_PRODUCER_MINUTES !== ""
       ? Number(env.EVALUATOR_MIN_PRODUCER_MINUTES) : 5,
-    requireAttention: env.EVALUATOR_REQUIRE_ATTENTION !== "0" && env.EVALUATOR_REQUIRE_ATTENTION !== "false",
+    /* failing the attention check does not exclude a target unless the researcher asks */
+    requireAttention: flag(env.EVALUATOR_REQUIRE_ATTENTION),
     includeLegacyConsent: flag(env.EVALUATOR_INCLUDE_LEGACY_CONSENT),
     minTargets: Math.max(3, Number(env.EVALUATOR_MIN_TARGETS || 3))
   };

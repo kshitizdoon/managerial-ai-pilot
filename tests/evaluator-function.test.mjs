@@ -171,3 +171,11 @@ test("researcher GET needs the key and returns assignments, evaluations and the 
     assert.ok(r.json.assignments[0].slots[0].target.mda >= 0, "ability is there for the researcher");
   });
 });
+
+test("a Producer who failed the attention check can still be rated, unless the researcher switches the rule on", async () => {
+  const { ev } = await setup(6, { attention: false });
+  await env(ON, async () => assert.equal((await ev({ action: "assign", pid: "prod0" })).json.status, "assigned"));
+  const again = await setup(6, { attention: false });
+  await env({ ...ON, EVALUATOR_REQUIRE_ATTENTION: "1" }, async () =>
+    assert.equal((await again.ev({ action: "assign", pid: "prod0" })).json.status, "not_enough"));
+});
