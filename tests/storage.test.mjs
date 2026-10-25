@@ -141,3 +141,16 @@ test("no answer at all is reported as a network error", async () => {
   assert.equal(await site.run(`checkpointResponse(R, "x")`), null);
   assert.equal(JSON.parse(site.localStorage.getItem(LS_KEY)).lastServerSaveError, "network: Failed to fetch");
 });
+
+test("a browser that refuses keepalive requests still saves: the same request goes again without it", async () => {
+  const calls = [];
+  const site = loadSite({ fetch: async (url, init) => {
+    calls.push(init.keepalive);
+    if (init.keepalive) throw new TypeError("keepalive not supported");
+    return { ok: true, status: 200, text: async () => "" };
+  } });
+  freshRecord(site);
+  assert.equal(await site.run(`checkpointResponse(R, "x")`), "function");
+  assert.deepEqual(calls, [true, false], "one try, two sends");
+  assert.equal(JSON.parse(site.localStorage.getItem(LS_KEY)).lastServerSaveOK, true);
+});

@@ -222,7 +222,7 @@ async function evCheckpoint(reason){
     if(EV_RETRY_WAITS_MS[i]) await sleep(EV_RETRY_WAITS_MS[i]);
     if(i > 0 && (rec.lastServerSeq || 0) >= seq) return "function";
     try{
-      const r = await fetch(CONFIG.evaluatorPath, {method:"POST", headers:{"Content-Type":"application/json"}, body, keepalive:true});
+      const r = await postJSON(CONFIG.evaluatorPath, body, true);
       if(!r.ok){ const t = await r.text().catch(() => ""); throw new Error("function " + r.status + (t ? ": " + t : "")); }
       if(seq >= (rec.lastServerSeq || 0)){ rec.lastServerSeq = seq; rec.lastServerSaveError = null; }
       if(EV === rec) evSave();
