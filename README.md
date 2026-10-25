@@ -148,9 +148,17 @@ push.
 ## If responses do not save
 
 1. Open `https://yoursite.netlify.app/api/responses?health=1`. It needs no
-   key and shows no data. `"ok": true` means the function and Netlify Blobs
-   work. Otherwise `step` and `error` say which part failed. A 404 means
-   the function is not deployed.
+   key and shows no data. It runs every operation a save uses, one by one,
+   on a separate probe store:
+   - `"ok": true`: the normal save path works.
+   - `"ok": false, "fallbackOk": true`: part of Netlify Blobs refuses, for
+     example strong reads or conditional writes, but saves still land
+     through the fallbacks.
+   - `"fallbackOk": false`: nothing can be written. Each step names its
+     error.
+   - `"blobsEnvironment": false`: Netlify did not connect the function to
+     Blobs at all.
+   - A 404 means the function is not deployed.
 2. On a failed save, the participant's last screen shows a
    *Technical detail* line, and the copied text holds the same message in
    `lastServerSaveError`. `network: ...` means the request never got an

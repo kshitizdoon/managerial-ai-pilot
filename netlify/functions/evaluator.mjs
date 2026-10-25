@@ -24,7 +24,7 @@
    ============================================================= */
 
 import { getStore } from "@netlify/blobs";
-import { upsertRecord, cleanId, json, describe, readAll, keyOk } from "../lib/upsert.mjs";
+import { upsertRecord, cleanId, json, describe, readAll, keyOk, resilientStore } from "../lib/upsert.mjs";
 import { settings, chooseAssignment, clientView, cleanEvaluation, poolSummary } from "../lib/eval-core.mjs";
 
 const PRODUCERS = "pilot-responses";
@@ -42,9 +42,9 @@ export default async (request) => {
 };
 
 const stores = () => ({
-  producers: getStore({ name: PRODUCERS, consistency: "strong" }),
-  assignments: getStore({ name: ASSIGNMENTS, consistency: "strong" }),
-  evaluations: getStore({ name: EVALUATIONS, consistency: "strong" })
+  producers: resilientStore(getStore, PRODUCERS),
+  assignments: resilientStore(getStore, ASSIGNMENTS),
+  evaluations: resilientStore(getStore, EVALUATIONS)
 });
 
 async function handle(request) {
