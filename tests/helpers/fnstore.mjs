@@ -11,15 +11,26 @@ import { ROOT } from "./load.mjs";
 
 const MOCK = `
 export const stores = new Map();
+/* failOn: "read" (every read), "strong" (strong-consistency reads only),
+   "conditional" (writes with onlyIfNew/onlyIfMatch throw), "set" (every
+   write), "get" (get only); or an array of these */
 export const hooks = { beforeSet: null, failOn: null };
 let n = 0;
-export function getStore({ name }){
+export function getStore({ name, consistency }){
   if(!stores.has(name)) stores.set(name, new Map());
   const db = stores.get(name);
+  const has = m => Array.isArray(hooks.failOn) ? hooks.failOn.includes(m) : hooks.failOn === m;
+  const failRead = () => {
+    if(has("read")) throw new Error("mock read failure");
+    if(has("strong") && consistency === "strong")
+      throw Object.assign(new Error("mock strong read refused"), { name: "BlobsConsistencyError" });
+  };
   return {
-    async getWithMetadata(k){ if(hooks.failOn === "read") throw new Error("mock read failure"); const r = db.get(k); return r ? { data: JSON.parse(r.v), etag: r.e } : null; },
+    async getWithMetadata(k){ failRead(); const r = db.get(k); return r ? { data: JSON.parse(r.v), etag: r.e } : null; },
     async setJSON(k, v, o = {}){
-      if(hooks.failOn === "set") throw Object.assign(new Error("mock write failure"), { name: "BlobsInternalError" });
+      if(has("set")) throw Object.assign(new Error("mock write failure"), { name: "BlobsInternalError" });
+      if(has("conditional") && (o.onlyIfNew || o.onlyIfMatch))
+        throw Object.assign(new Error("mock conditional write refused"), { name: "BlobsInternalError" });
       if(hooks.beforeSet){ const h = hooks.beforeSet; hooks.beforeSet = null; await h(db); }
       const cur = db.get(k);
       if(o.onlyIfNew && cur) return { modified: false };
@@ -27,8 +38,8 @@ export function getStore({ name }){
       db.set(k, { v: JSON.stringify(v), e: "etag" + (++n) });
       return { modified: true, etag: "etag" + n };
     },
-    async list(){ return { blobs: [...db.keys()].map(key => ({ key })) }; },
-    async get(k){ if(hooks.failOn === "get") throw new Error("mock get failure"); const r = db.get(k); return r ? JSON.parse(r.v) : null; },
+    async list(){ failRead(); return { blobs: [...db.keys()].map(key => ({ key })) }; },
+    async get(k){ failRead(); if(has("get")) throw new Error("mock get failure"); const r = db.get(k); return r ? JSON.parse(r.v) : null; },
     async delete(k){ db.delete(k); }
   };
 }`;

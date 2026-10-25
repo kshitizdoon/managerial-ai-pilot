@@ -53,20 +53,26 @@ function archiveLocal(){
 
 const sleep = ms => new Promise(res => setTimeout(res, ms));
 
-async function sendBody(body){
-  let bytes = body.length;
-  try{ bytes = new TextEncoder().encode(body).length; }catch(e){}
-  let r;
-  try{
-    r = await fetch(CONFIG.functionPath, {
-      method:"POST", headers:{"Content-Type":"application/json"}, body,
-      /* keepalive lets the request finish if the tab closes */
-      keepalive: bytes < KEEPALIVE_MAX_BYTES
-    });
-  }catch(e){
+/* POST with keepalive, so the request can finish if the tab closes. Some
+   browsers refuse a keepalive request outright; then the same request is
+   sent at once without it rather than counted as a failed try. */
+async function postJSON(path, body, keepalive){
+  const send = ka => fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body, keepalive: ka});
+  try{ return await send(keepalive); }
+  catch(e){
+    if(keepalive){
+      try{ return await send(false); }
+      catch(e2){ throw new Error("network: " + String(e2 && e2.message || e2)); }
+    }
     /* no answer at all: offline, blocked, or no function on this host */
     throw new Error("network: " + String(e && e.message || e));
   }
+}
+
+async function sendBody(body){
+  let bytes = body.length;
+  try{ bytes = new TextEncoder().encode(body).length; }catch(e){}
+  const r = await postJSON(CONFIG.functionPath, body, bytes < KEEPALIVE_MAX_BYTES);
   if(!r.ok){
     const detail = await r.text().catch(() => "");
     throw new Error("function " + r.status + (detail ? ": " + detail : ""));

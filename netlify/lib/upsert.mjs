@@ -9,9 +9,49 @@
      unfinished copy never replaces a finished one.
    - keepFirst: fields set by the first stored copy and never replaced
      (the Producer's instrument stamp, the Evaluator's assignment id).
+
+   Fallbacks, so a save still lands if part of Netlify Blobs refuses:
+   - a strong-consistency read that fails is retried as a normal read
+     (resilientStore);
+   - a conditional write that throws (rather than answering "changed") is
+     retried as a plain write, after the saveSeq and finished rules are
+     checked again against a fresh read. If nothing can be read at all,
+     only a finished copy is written, so an older checkpoint can never
+     replace a finished record blind.
+   Each fallback is logged and reported in the response as "mode".
    ============================================================= */
 
 export const MAX_WRITE_TRIES = 5;
+
+/* a store whose reads fall back from strong to normal consistency */
+export function resilientStore(getStore, name) {
+  const strong = getStore({ name, consistency: "strong" });
+  let normal = null;
+  const fallback = () => normal || (normal = getStore({ name }));
+  const read = async (op, what) => {
+    try { return await op(strong); }
+    catch (err) {
+      console.warn(`blobs: strong ${what} on ${name} failed, retrying without strong consistency`, describe(err));
+      return op(fallback());
+    }
+  };
+  return {
+    name,
+    getWithMetadata: (k, o) => read(st => st.getWithMetadata(k, o), "read"),
+    get: (k, o) => read(st => st.get(k, o), "read"),
+    list: o => read(st => st.list(o), "list"),
+    setJSON: (k, v, o) => strong.setJSON(k, v, o),
+    delete: k => strong.delete(k)
+  };
+}
+
+/* why an incoming copy must not replace the stored one, or null */
+function staleReason(existing, body) {
+  const existingSeq = Number(existing.saveSeq || 0), incomingSeq = Number(body.saveSeq || 0);
+  if (existing.done && !body.done) return "already_complete";
+  if (!!existing.done === !!body.done && incomingSeq < existingSeq) return "older_checkpoint";
+  return null;
+}
 
 export function cleanId(pid) {
   return String(pid == null ? "" : pid).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
@@ -20,6 +60,12 @@ export function cleanId(pid) {
 /* returns {status, body} for the caller to send as JSON */
 export async function upsertRecord(store, id, body, { keepFirst = [] } = {}) {
   const incomingSeq = Number(body.saveSeq || 0);
+  const applyExisting = existing => {
+    for (const f of keepFirst) {
+      if (f in existing) body[f] = existing[f];
+      else delete body[f];
+    }
+  };
   for (let attempt = 0; attempt < MAX_WRITE_TRIES; attempt++) {
     let cur = null;
     try { cur = await store.getWithMetadata(id, { type: "json" }); }
@@ -27,17 +73,9 @@ export async function upsertRecord(store, id, body, { keepFirst = [] } = {}) {
     const existing = cur ? cur.data : null;
 
     if (existing) {
-      const existingSeq = Number(existing.saveSeq || 0);
-      if (existing.done && !body.done) {
-        return { status: 200, body: { ok: true, id, ignored: "already_complete", saveSeq: existingSeq } };
-      }
-      if (!!existing.done === !!body.done && incomingSeq < existingSeq) {
-        return { status: 200, body: { ok: true, id, ignored: "older_checkpoint", saveSeq: existingSeq } };
-      }
-      for (const f of keepFirst) {
-        if (f in existing) body[f] = existing[f];
-        else delete body[f];
-      }
+      const stale = staleReason(existing, body);
+      if (stale) return { status: 200, body: { ok: true, id, ignored: stale, saveSeq: Number(existing.saveSeq || 0) } };
+      applyExisting(existing);
     }
 
     body.receivedAt = new Date().toISOString();
@@ -46,7 +84,25 @@ export async function upsertRecord(store, id, body, { keepFirst = [] } = {}) {
     const opts = !cur ? { onlyIfNew: true }
                : cur.etag ? { onlyIfMatch: cur.etag }
                : {};
-    const res = await store.setJSON(id, body, opts);
+    let res;
+    try {
+      res = await store.setJSON(id, body, opts);
+    } catch (err) {
+      if (!opts.onlyIfNew && !opts.onlyIfMatch) throw err;
+      /* the conditional write itself was refused: check again, then write plainly */
+      console.warn(`blobs: conditional write of ${id} failed, retrying as a plain write`, describe(err));
+      let again, readable = true;
+      try { again = await store.getWithMetadata(id, { type: "json" }); } catch { readable = false; }
+      if (!readable && !body.done)
+        return { status: 503, body: { error: "store unreadable; checkpoint not written, retry", detail: describe(err) } };
+      if (again && again.data) {
+        const stale = staleReason(again.data, body);
+        if (stale) return { status: 200, body: { ok: true, id, ignored: stale, saveSeq: Number(again.data.saveSeq || 0) } };
+        applyExisting(again.data);
+      }
+      await store.setJSON(id, body);
+      return { status: 200, body: { ok: true, id, saveSeq: incomingSeq, status: body.status, mode: "unconditional" } };
+    }
     if (res && res.modified === false) continue;  // someone wrote in between: check again
     return { status: 200, body: { ok: true, id, saveSeq: incomingSeq, status: body.status } };
   }

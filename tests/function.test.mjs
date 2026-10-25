@@ -134,21 +134,70 @@ test("health check writes, reads and deletes a probe without a key, and touches 
   const j = await r.json();
   assert.equal(r.status, 200);
   assert.equal(j.ok, true);
-  assert.equal(j.step, "done");
+  assert.equal(j.fallbackOk, true);
+  assert.ok(j.steps.length >= 7 && j.steps.every(x => x.ok), JSON.stringify(j.steps));
   assert.equal(typeof j.dashboardKeySet, "boolean");
   assert.equal(j.responses, undefined, "no records in a health answer");
   assert.deepEqual([...fn.db().keys()], ["keep1"], "response store untouched");
 });
 
-test("health check names the step and the error when the store fails", async () => {
+test("health check names the failing step and says whether the fallbacks would still save", async () => {
+  const run = async failOn => {
+    const fn = await loadFunction();
+    fn.hooks.failOn = failOn;
+    const r = await fn.handler(new Request("http://site/api/responses?health=1"));
+    const j = await r.json();
+    return { status: r.status, j, failed: j.steps.filter(x => !x.ok).map(x => x.step) };
+  };
+  const set = await run("set");
+  assert.equal(set.status, 500);
+  assert.deepEqual([set.j.ok, set.j.fallbackOk], [false, false]);
+  assert.ok(set.failed.includes("conditional write: only if new") && set.failed.includes("plain write"));
+  assert.equal(set.j.steps.find(x => x.step === "plain write").error, "BlobsInternalError: mock write failure");
+  const cond = await run("conditional");
+  assert.deepEqual([cond.j.ok, cond.j.fallbackOk], [false, true], "plain writes still work, so saves land");
+  assert.ok(cond.failed.includes("conditional write: only if new"));
+  const strong = await run("strong");
+  assert.deepEqual([strong.j.ok, strong.j.fallbackOk], [false, true]);
+  assert.ok(strong.failed.includes("read with metadata (strong)"));
+  assert.equal(typeof strong.j.blobsEnvironment, "boolean");
+});
+
+test("strong reads refused: saves still land, and the saveSeq rules still hold", async () => {
   const fn = await loadFunction();
-  fn.hooks.failOn = "set";
-  const r = await fn.handler(new Request("http://site/api/responses?health=1"));
-  const j = await r.json();
-  assert.equal(r.status, 500);
-  assert.equal(j.ok, false);
-  assert.equal(j.step, "write");
-  assert.equal(j.error, "BlobsInternalError: mock write failure");
+  fn.hooks.failOn = "strong";
+  assert.equal((await fn.post({ pid: "s1", saveSeq: 1 })).json.status, "in_progress");
+  await fn.post({ pid: "s1", saveSeq: 3, done: true });
+  assert.equal((await fn.post({ pid: "s1", saveSeq: 9 })).json.ignored, "already_complete");
+  assert.equal(fn.stored("s1").saveSeq, 3);
+});
+
+test("conditional writes refused: saves land as plain writes, rules checked against a fresh read", async () => {
+  const fn = await loadFunction();
+  fn.hooks.failOn = "conditional";
+  const r = await fn.post({ pid: "c1", saveSeq: 1, instrument: { v: 1 } });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.mode, "unconditional");
+  await fn.post({ pid: "c1", saveSeq: 4, instrument: { v: 2 } });
+  assert.deepEqual(fn.stored("c1").instrument, { v: 1 }, "first instrument stamp kept");
+  assert.equal((await fn.post({ pid: "c1", saveSeq: 2 })).json.ignored, "older_checkpoint");
+  await fn.post({ pid: "c1", saveSeq: 5, done: true });
+  assert.equal((await fn.post({ pid: "c1", saveSeq: 9 })).json.ignored, "already_complete");
+  assert.equal(fn.stored("c1").status, "complete");
+});
+
+test("nothing readable and conditional writes refused: only a finished copy is written", async () => {
+  const fn = await loadFunction();
+  await fn.post({ pid: "u1", saveSeq: 2, done: false, mark: "kept" });
+  fn.hooks.failOn = ["read", "conditional"];
+  const r1 = await fn.post({ pid: "u1", saveSeq: 3, mark: "blind" });
+  assert.equal(r1.status, 503, "an unfinished checkpoint is never written blind");
+  assert.equal(fn.stored("u1").mark, "kept");
+  const r2 = await fn.post({ pid: "u1", saveSeq: 4, done: true, mark: "finished" });
+  assert.equal(r2.status, 200);
+  assert.equal(r2.json.mode, "unconditional");
+  fn.hooks.failOn = null;
+  assert.equal(fn.stored("u1").mark, "finished");
 });
 
 test("a store failure during a save answers 500 with the real error, as JSON", async () => {
