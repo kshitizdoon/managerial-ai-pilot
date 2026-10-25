@@ -173,6 +173,31 @@ h3.part{margin:1.2rem 0 .2rem;font-size:1.05rem}
 label.reason{display:block;font-size:.95rem;font-weight:600;margin:0 0 .35rem}
 label.reason .muted{font-weight:400}
 
+/* Part 2: one earlier participant's decisions --------------------------- */
+.evshown{font-size:.95rem;margin:.2rem 0 .2rem;padding:.55rem .75rem;border:1px solid var(--line);border-radius:9px;background:var(--card);max-width:none}
+.evrec{display:grid;gap:.45rem}
+.evrow{border:1px solid var(--line);border-radius:9px;padding:.5rem .7rem;background:var(--paper)}
+.evrow .tag{display:block;font-size:.72rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.15rem}
+.evrow b{font-size:.98rem}
+.evrow p{margin:.3rem 0 0;font-size:.93rem;line-height:1.45}
+.chg{display:inline-block;margin-left:.6rem;font-size:.8rem;padding:.1rem .45rem;border:1px solid var(--line);border-radius:999px;color:var(--muted);background:var(--card)}
+.chg[data-changed="true"]{border-color:var(--ink);color:var(--ink)}
+.raterow{display:flex;gap:.8rem;align-items:center;margin-top:.6rem}
+/* a plain track with no fill, so no part of the scale looks chosen */
+.raterow input[type=range]{flex:1;min-width:0;-webkit-appearance:none;appearance:none;height:1.6rem;background:transparent;cursor:pointer}
+.raterow input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--line)}
+.raterow input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--line)}
+.raterow input[type=range]::-moz-range-progress{background:transparent}
+.raterow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6px;border-radius:50%;background:var(--ink);border:2px solid var(--card)}
+.raterow input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--ink);border:2px solid var(--card)}
+.raterow input[type=range]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.raterow input[type=number]{width:5.5rem;flex:0 0 auto}
+.rate .ends{display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);margin-top:.25rem;max-width:calc(100% - 6.3rem)}
+/* no value until the respondent gives one: hide the thumb */
+input[type=range].unset::-webkit-slider-thumb{opacity:0}
+input[type=range].unset::-moz-range-thumb{opacity:0}
+@media (max-width:30rem){ .rate .ends span:nth-child(2){display:none} }
+
 /* development-only: a declared constraint is broken ---------------------- */
 .devwarn{background:#7A1B1B;color:#fff;padding:.7rem 1.1rem;font-size:.85rem;line-height:1.45}
 .devwarn b{display:block;margin-bottom:.3rem}

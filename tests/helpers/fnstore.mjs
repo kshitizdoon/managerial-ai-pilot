@@ -33,28 +33,48 @@ export function getStore({ name }){
   };
 }`;
 
-export async function loadFunction(){
+/* Copies netlify/functions and netlify/lib into one temp folder, points
+   every "@netlify/blobs" import at one shared mock, and imports the
+   functions. Both functions then see the same stores, as on Netlify. */
+export async function loadFunctions(){
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fn-"));
   fs.writeFileSync(path.join(dir, "mock.mjs"), MOCK);
+  for (const sub of ["functions", "lib"]) {
+    fs.mkdirSync(path.join(dir, sub));
+    for (const f of fs.readdirSync(path.join(ROOT, "netlify", sub)).filter(f => f.endsWith(".mjs"))) {
+      const src = fs.readFileSync(path.join(ROOT, "netlify", sub, f), "utf8");
+      fs.writeFileSync(path.join(dir, sub, f), src.replace(/from "@netlify\/blobs"/g, 'from "../mock.mjs"'));
+    }
+  }
+  const mock = await import(pathToFileURL(path.join(dir, "mock.mjs")).href);
+  const responses = await import(pathToFileURL(path.join(dir, "functions", "responses.mjs")).href);
+  const evaluator = fs.existsSync(path.join(dir, "functions", "evaluator.mjs"))
+    ? await import(pathToFileURL(path.join(dir, "functions", "evaluator.mjs")).href) : null;
+  const db = name => mock.stores.get(name) || new Map();
+  return { mock, responses, evaluator, db, hooks: mock.hooks };
+}
+
+export async function loadFunction(){
   const src = fs.readFileSync(path.join(ROOT, "netlify/functions/responses.mjs"), "utf8");
   if(!src.includes('from "@netlify/blobs"')) throw new Error("function no longer imports @netlify/blobs as expected");
-  fs.writeFileSync(path.join(dir, "fn.mjs"), src.replace('from "@netlify/blobs"', 'from "./mock.mjs"'));
-  const fn = await import(pathToFileURL(path.join(dir, "fn.mjs")).href);
-  const mock = await import(pathToFileURL(path.join(dir, "mock.mjs")).href);
-  const db = () => mock.stores.get("pilot-responses") || new Map();
+  const all = await loadFunctions();
+  const fn = all.responses;
+  const db = () => all.db("pilot-responses");
+  const call = (url, init) => fn.default(new Request(url, init));
   return {
     handler: fn.default,
     config: fn.config,
-    hooks: mock.hooks,
+    hooks: all.hooks,
+    all,
     db,
     stored: pid => { const r = db().get(pid); return r ? JSON.parse(r.v) : null; },
     async post(body){
-      const res = await fn.default(new Request("http://site/api/responses", {
-        method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) }));
+      const res = await call("http://site/api/responses", {
+        method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) });
       return { status: res.status, json: await res.json() };
     },
     async get(key){
-      const res = await fn.default(new Request("http://site/api/responses" + (key == null ? "" : "?key=" + encodeURIComponent(key))));
+      const res = await call("http://site/api/responses" + (key == null ? "" : "?key=" + encodeURIComponent(key)));
       return { status: res.status, json: await res.json() };
     }
   };

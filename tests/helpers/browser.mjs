@@ -52,7 +52,7 @@ export async function setup(){
   const { server, base } = await startServer();
   const browser = await launch();
   const fn = await loadFunction();
-  const api = { posts: [], failPosts: 0, fn };
+  const api = { posts: [], failPosts: 0, evPosts: [], evGets: [], failEvPosts: 0, fn };
   async function newPage(){
     const context = await browser.newContext({ acceptDownloads: true });
     const page = await context.newPage();
@@ -67,6 +67,18 @@ export async function setup(){
         if(api.failPosts > 0){ api.failPosts--; return route.fulfill({ status: 500, body: "test failure" }); }
       }
       const res = await fn.handler(new Request(req.url(), { method: req.method(),
+        body: req.method() === "POST" ? req.postData() : undefined }));
+      route.fulfill({ status: res.status, contentType: "application/json", body: await res.text() });
+    });
+    /* Part 2: the real evaluator function, over the same stores */
+    await page.route("**/api/evaluator*", async route => {
+      const req = route.request();
+      if(req.method() === "POST"){
+        api.evPosts.push(JSON.parse(req.postData()));
+        if(api.failEvPosts > 0){ api.failEvPosts--; return route.fulfill({ status: 500, body: "test failure" }); }
+      }
+      if(req.method() === "GET") api.evGets.push(req.url());
+      const res = await fn.all.evaluator.default(new Request(req.url(), { method: req.method(),
         body: req.method() === "POST" ? req.postData() : undefined }));
       route.fulfill({ status: res.status, contentType: "application/json", body: await res.text() });
     });

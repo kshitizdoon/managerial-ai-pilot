@@ -28,6 +28,7 @@
 <script src="js/stats.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/survey.js"></script>
+<script src="js/evaluator.js"></script>
 <script src="js/dashboard.js"></script>
 <script>
 /* router: #researcher=KEY opens the results view, anything else is the survey */
@@ -43,7 +44,7 @@ function dashKeyFromHash(){
    and a file that is an older copy both fail the same test, which is what
    you want: a stale script is the harder of the two to spot. */
 const MODULES = [
-  ["js/config.js",    () => typeof CONFIG === "object" && "aiConditions" in CONFIG && "instrumentVersion" in CONFIG],
+  ["js/config.js",    () => typeof CONFIG === "object" && "evaluatorPath" in CONFIG && "consentVersion" in CONFIG],
   ["js/cases.js",     () => typeof CASES !== "undefined" && typeof ACTIONS !== "undefined" && typeof PRACTICE !== "undefined"],
   ["js/art.js",       () => typeof ART === "object"],
   ["js/key.js",       () => typeof KEY !== "undefined"],
@@ -52,7 +53,8 @@ const MODULES = [
   ["js/stats.js",     () => typeof mean === "function"],
   ["js/storage.js",   () => typeof mergeRecords === "function" && typeof archivedRows === "function"],
   ["js/survey.js",    () => typeof startSurvey === "function" && typeof failReason === "function"],
-  ["js/dashboard.js", () => typeof showDashboard === "function" && typeof rawExport === "function" && typeof decisionRows === "function"]
+  ["js/evaluator.js", () => typeof evaluatorOffer === "function" && typeof evPage === "function"],
+  ["js/dashboard.js", () => typeof showDashboard === "function" && typeof rawExport === "function" && typeof evaluatorSection === "function"]
 ];
 function missingModules(){
   return MODULES.filter(m => { try{ return !m[1](); }catch(e){ return true; } }).map(m => m[0]);

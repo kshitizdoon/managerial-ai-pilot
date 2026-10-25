@@ -36,6 +36,15 @@ window.CONFIG = {
      "local" (set by build.py for the single-file bundle) skips the server. */
   storage: "function",
   functionPath: "/api/responses",
+  evaluatorPath: "/api/evaluator",
+
+  /* ---- Consent ---------------------------------------------------------
+     Stamped on every new Producer record. Version 2 is the first welcome
+     text that says decisions may be shown, anonymously, to other
+     participants for rating. Part 2 (the Evaluator stage) only shows
+     Producers with version 2 or later, unless the researcher sets
+     EVALUATOR_INCLUDE_LEGACY_CONSENT=1 in Netlify after approval.       */
+  consentVersion: 2,
 
   /* The results view is at  yoursite.netlify.app/#researcher=KEY
      KEY is the DASHBOARD_KEY environment variable in Netlify. Keep it
