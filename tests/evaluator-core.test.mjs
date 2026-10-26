@@ -59,11 +59,11 @@ test("eligibility: only complete, valid, consented, unhurried records of this in
   assert.equal(core.eligibility(makeRecord(site, { pid: "ia", attention: false }), { ...S, requireAttention: true }, null).reason, "failed_attention", "only if the researcher switches it on");
 });
 
-test("settings come from environment variables, off by default", () => {
-  assert.deepEqual(core.settings({}), { enabled: false, minMinutes: 5, requireAttention: false, includeLegacyConsent: false, minTargets: 3 });
+test("settings preserve the five-minute threshold and allow legacy consent while ignoring attention failures", () => {
+  assert.deepEqual(core.settings({}), { enabled: false, minMinutes: 5, requireAttention: false, includeLegacyConsent: true, minTargets: 3 });
   assert.deepEqual(core.settings({ EVALUATOR_ENABLED: "1", EVALUATOR_MIN_PRODUCER_MINUTES: "8", EVALUATOR_REQUIRE_ATTENTION: "1",
     EVALUATOR_INCLUDE_LEGACY_CONSENT: "true", EVALUATOR_MIN_TARGETS: "12" }),
-    { enabled: true, minMinutes: 8, requireAttention: true, includeLegacyConsent: true, minTargets: 12 });
+    { enabled: true, minMinutes: 8, requireAttention: false, includeLegacyConsent: true, minTargets: 12 });
   assert.equal(core.settings({ EVALUATOR_MIN_TARGETS: "1" }).minTargets, 3, "never fewer than three");
 });
 

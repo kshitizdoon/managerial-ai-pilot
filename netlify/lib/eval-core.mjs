@@ -38,8 +38,8 @@ export function settings(env = (typeof process !== "undefined" ? process.env : {
     minMinutes: env.EVALUATOR_MIN_PRODUCER_MINUTES != null && env.EVALUATOR_MIN_PRODUCER_MINUTES !== ""
       ? Number(env.EVALUATOR_MIN_PRODUCER_MINUTES) : 5,
     /* failing the attention check does not exclude a target unless the researcher asks */
-    requireAttention: flag(env.EVALUATOR_REQUIRE_ATTENTION),
-    includeLegacyConsent: flag(env.EVALUATOR_INCLUDE_LEGACY_CONSENT),
+    requireAttention: false, // Include attention-check failures; keep duration and other eligibility rules.
+    includeLegacyConsent: true, // Include prior records without the newer structured reuse-consent field; researcher confirms consent was obtained.
     minTargets: Math.max(3, Number(env.EVALUATOR_MIN_TARGETS || 3))
   };
 }
