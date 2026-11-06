@@ -8,7 +8,7 @@
    AI recommendation is the exact text that target was shown.
 
    One assignment per evaluator:
-   - one caselet and three of its five decisions, the same for all three
+   - one caselet and three of its four decisions, the same for all three
      people the evaluator rates, so the context and items are held
      constant across the three information conditions;
    - three different targets, one from each third of the eligible pool
@@ -21,7 +21,7 @@
      instrument version are least used under its condition.
    ============================================================= */
 
-import { KEY, CASE_IDS, CASE_DECISIONS, RECORD_SCHEMA, INSTRUMENT_VERSION } from "./instrument-data.mjs";
+import { KEY, CASE_IDS, CASE_DECISIONS, RECORD_SCHEMA, INSTRUMENT_VERSION, DECISION_MAX } from "./instrument-data.mjs";
 
 export const CONDITIONS = ["A", "B", "C"];
 export const STRATA = ["high", "middle", "low"];
@@ -37,7 +37,7 @@ export function settings(env = (typeof process !== "undefined" ? process.env : {
     enabled: flag(env.EVALUATOR_ENABLED),
     minMinutes: env.EVALUATOR_MIN_PRODUCER_MINUTES != null && env.EVALUATOR_MIN_PRODUCER_MINUTES !== ""
       ? Number(env.EVALUATOR_MIN_PRODUCER_MINUTES) : 5,
-    /* failing the attention check does not exclude a target unless the researcher asks */
+    /* the attention check (practice questions) was removed in November 2026; kept off */
     requireAttention: false, // Include attention-check failures; keep duration and other eligibility rules.
     includeLegacyConsent: true, // Include prior records without the newer structured reuse-consent field; researcher confirms consent was obtained.
     minTargets: Math.max(3, Number(env.EVALUATOR_MIN_TARGETS || 3))
@@ -49,9 +49,11 @@ function decisionScore(caseId, k, a) {
   const row = (KEY[caseId] || {})[k];
   return row && row[a] != null ? row[a] : 0;
 }
+/* the sum of decision scores, rescaled to 0-100 (scoring.js toCaseScale) */
 export function caseFirstScore(rec, caseId) {
-  const c = rec.cases[caseId];
-  return CASE_DECISIONS[caseId].reduce((s, k) => s + decisionScore(caseId, k, c.first[k]), 0);
+  const c = rec.cases[caseId], ks = CASE_DECISIONS[caseId];
+  const sum = ks.reduce((s, k) => s + decisionScore(caseId, k, c.first[k]), 0);
+  return Math.round(sum * 100 / (DECISION_MAX * ks.length) * 100) / 100;
 }
 /* pre-AI managerial decision-making ability: mean first-answer case score, 0-100 */
 export function mda(rec) {

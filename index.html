@@ -45,7 +45,7 @@ function dashKeyFromHash(){
    you want: a stale script is the harder of the two to spot. */
 const MODULES = [
   ["js/config.js",    () => typeof CONFIG === "object" && "evaluatorPath" in CONFIG && "consentVersion" in CONFIG],
-  ["js/cases.js",     () => typeof CASES !== "undefined" && typeof ACTIONS !== "undefined" && typeof PRACTICE !== "undefined"],
+  ["js/cases.js",     () => typeof CASES !== "undefined" && typeof ACTIONS !== "undefined" && typeof INSTRUCTIONS !== "undefined"],
   ["js/art.js",       () => typeof ART === "object"],
   ["js/key.js",       () => typeof KEY !== "undefined"],
   ["js/order.js",     () => typeof constrainedShuffle === "function"],

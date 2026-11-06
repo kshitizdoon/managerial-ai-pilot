@@ -14,14 +14,15 @@ test("recordState: complete, in_progress, anomalous, earlier_instrument", () => 
     [makeRecord(site, {}), "complete"],
     [makeRecord(site, { done: false }), "in_progress"],
     [makeRecord(site, { done: false, firsts: 2, finals: 1 }), "in_progress"],
-    [makeRecord(site, { firsts: 5, finals: 5 }), "anomalous"],
-    [makeRecord(site, { firsts: 6, finals: 5 }), "anomalous"],
+    [makeRecord(site, { firsts: 4, finals: 4 }), "anomalous"],
+    [makeRecord(site, { firsts: 5, finals: 4 }), "anomalous"],
     [makeRecord(site, { firsts: 0, finals: 0 }), "anomalous"],
-    [{ pid: "nocases", done: true, schemaVersion: 3 }, "anomalous"],
+    [{ pid: "nocases", done: true, schemaVersion: 4 }, "anomalous"],
     [earlierPilotRecord("old", true), "earlier_instrument"],
     [earlierPilotRecord("old2", false), "earlier_instrument"],
     [{ pid: "noschema", done: true, cases: {} }, "earlier_instrument"],
-    [makeRecord(site, { schema: 2 }), "earlier_instrument"]
+    [makeRecord(site, { schema: 2 }), "earlier_instrument"],
+    [makeRecord(site, { schema: 3 }), "earlier_instrument"]
   ];
   for (const [r, want] of cases) assert.equal(run(`recordState(${J(r)})`), want, r.pid + " " + want);
 });
@@ -31,7 +32,7 @@ test("raw export holds every record exactly as saved, earlier versions included"
   complete.contact = { name: "A Person", mobile: "999" };
   complete.lastServerSeq = 14; complete.clientSavedAt = "2026-10-01T10:30:00.000Z";
   const prog = makeRecord(site, { pid: "p1", done: false, firsts: 3, finals: 2 });
-  const anom = makeRecord(site, { pid: "a1", firsts: 5, finals: 5 });
+  const anom = makeRecord(site, { pid: "a1", firsts: 4, finals: 4 });
   const old = earlierPilotRecord("old");
   const recs = [complete, prog, anom, old];
   const out = run(`rawExport(${J(recs)}, {c1:"server", p1:"device_archive", a1:"imported", old:"server"})`);
@@ -40,14 +41,14 @@ test("raw export holds every record exactly as saved, earlier versions included"
   assert.deepEqual(out.responses, recs, "records are passed through untouched");
   assert.deepEqual(out.counts, { total: 4, complete: 1, in_progress: 1, anomalous: 1, earlier_instrument: 1 });
   assert.deepEqual(out.index.map(i => [i.pid, i.state, i.source, i.casesCompleted, i.firstPlans]), [
-    ["c1", "complete", "server", 6, 6], ["p1", "in_progress", "device_archive", 2, 3],
-    ["a1", "anomalous", "imported", 5, 5], ["old", "earlier_instrument", "server", 1, 1]]);
+    ["c1", "complete", "server", 5, 5], ["p1", "in_progress", "device_archive", 2, 3],
+    ["a1", "anomalous", "imported", 4, 4], ["old", "earlier_instrument", "server", 1, 1]]);
   assert.deepEqual(out.scoredWith, run("instrumentMeta()"));
 
   /* the fields the manual asks to be recorded */
   const r = out.responses[0];
   for (const k of ["pid", "status", "done", "instrument", "schemaVersion", "aiCondition", "aiLevels", "caseOrder",
-                   "bg", "end", "pilot", "contact", "practice", "saveSeq", "saveReason", "started", "finished", "totalMin"])
+                   "bg", "contact", "saveSeq", "saveReason", "started", "finished", "totalMin"])
     assert.ok(k in r, "missing " + k);
   for (const k of ["decisionOrder", "first", "final", "ai", "conf", "reason", "msA", "msB", "tA", "tB", "pos"])
     assert.ok(k in r.cases[3], "case field missing " + k);
@@ -66,7 +67,7 @@ test("CSV instrument columns: recorded and scored-with hashes", () => {
   assert.deepEqual(head.slice(-6), ["instrument_version", "scoring_version", "recorded_cases_hash",
     "recorded_key_hash", "scored_with_cases_hash", "scored_with_key_hash"]);
   const now = run("instrumentMeta()");
-  assert.deepEqual(lines[1].split(",").slice(-6), ["survey-2026-10-round3", "2", now.casesHash, now.keyHash, now.casesHash, now.keyHash]);
+  assert.deepEqual(lines[1].split(",").slice(-6), ["survey-2026-11-5x4", "3", now.casesHash, now.keyHash, now.casesHash, now.keyHash]);
 });
 
 test("instrument table names versions and flags re-scoring", () => {
@@ -76,7 +77,7 @@ test("instrument table names versions and flags re-scoring", () => {
   const nostamp = makeRecord(site, { pid: "nostamp" });
   delete nostamp.instrument;
   const html = run(`instrumentTable(${J([cur, other, nostamp])})`);
-  assert.match(html, /survey-2026-10-round3[\s\S]*yes/);
+  assert.match(html, /survey-2026-11-5x4[\s\S]*yes/);
   assert.match(html, /survey-older[\s\S]*no, re-scored with the current key/);
   assert.match(html, /not recorded/);
   assert.match(html, /1 completed response was collected under a different version/);

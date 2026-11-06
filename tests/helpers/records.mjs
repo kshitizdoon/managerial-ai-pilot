@@ -7,7 +7,7 @@
 import { plain } from "./load.mjs";
 
 export function makeRecord(site, opts = {}){
-  const o = { pid: "p", condition: 0, done: true, firsts: 6, finals: 6, first: "pref", final: "first", ...opts };
+  const o = { pid: "p", condition: 0, done: true, firsts: 5, finals: 5, first: "pref", final: "first", ...opts };
   return plain(site.run(`(() => {
     const o = ${JSON.stringify(o)}, cases = {}, levels = aiAssignment(o.condition);
     CASES.forEach((c, i) => {
@@ -25,16 +25,13 @@ export function makeRecord(site, opts = {}){
       cases[c.id] = rec;
     });
     return {pid:o.pid, aiCondition:o.condition, aiLevels:levels, started:"2026-10-01T10:00:00.000Z",
-      bg:{programme:"PGP year 1", experience:"None", managed:"No", aiUse:"Daily", undergrad:"Other"},
-      caseOrder:CASES.map(c => c.id), order:[0,1,2,3,4,5], at:o.finals, cases, msBg:5000, msIntro:20000,
-      practice:{answers:{a:"wait", b:"hold"}, correct:o.attention !== false, ms:30000, msFeedback:5000},
+      bg:o.done ? {programme:"PGP year 1", experience:"None", managed:"No", aiUse:"Daily", undergrad:"Other"} : null,
+      caseOrder:CASES.map(c => c.id), order:CASES.map((c, i) => i), at:o.finals, cases, msWelcome:5000, msIntro:20000,
       done:o.done, contact:o.contact ?? null, schemaVersion:o.schema ?? RECORD_SCHEMA, instrument:instrumentMeta(),
-      consent:o.consent === undefined ? {version:2, reuseForEvaluation:true} : o.consent,
+      consent:o.consent === undefined ? {version:3, reuseForEvaluation:true} : o.consent,
       saveSeq:1 + o.firsts + o.finals + (o.done ? 1 : 0), saveReason:o.done ? "finish" : "case_complete",
       status:o.done ? "complete" : "in_progress", receivedAt:"2026-10-01T10:30:00.000Z",
-      ...(o.done ? {finished:"2026-10-01T10:30:00.000Z", totalMin:o.totalMin ?? 30,
-        end:{aiHelp:"No", compare:"About the same", guess:"", cat:null},
-        pilot:{hardest:"None stood out", waitHold:"Clear", obvious:"", hardToFit:"", length:"About right", other:""}} : {})};
+      ...(o.done ? {finished:"2026-10-01T10:30:00.000Z", totalMin:o.totalMin ?? 30, msEnd:20000} : {})};
   })()`));
 }
 

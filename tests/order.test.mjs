@@ -8,7 +8,7 @@ const site = loadSite();
 const run = src => plain(site.run(src));
 
 test("no order constraints are declared, and the checker is clean", () => {
-  assert.deepEqual(run("CASES.map(c => cardEdges(c).length)"), [0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(run("CASES.map(c => cardEdges(c).length)"), [0, 0, 0, 0, 0]);
   assert.deepEqual(run("caseEdges()"), []);
   assert.deepEqual(run("checkOrderRules()"), []);
 });
@@ -21,18 +21,18 @@ test("caselet order is randomised; decision order is fixed", () => {
 test("decisions always come in the manual's order", () => {
   const res = run(`CASES.map(c => { const want = c.decisions.map(d => d.k).join();
     for(let t = 0; t < 200; t++) if(decisionOrderFor(c).join() !== want) return false; return true; })`);
-  assert.deepEqual(res, [true, true, true, true, true, true]);
+  assert.deepEqual(res, [true, true, true, true, true]);
 });
 
 test("caselet order is a permutation and reaches every order position for every caselet", () => {
   const res = run(`(() => { const seen = {}; let bad = 0;
     for(let t = 0; t < 4000; t++){
       const o = caseOrder();
-      if(o.length !== 6 || new Set(o).size !== 6 || o.some(i => !CASES[i])) bad++;
+      if(o.length !== 5 || new Set(o).size !== 5 || o.some(i => !CASES[i])) bad++;
       o.forEach((i, pos) => { seen[CASES[i].id + ":" + pos] = 1; });
     }
     return {bad, cells: Object.keys(seen).length}; })()`);
-  assert.deepEqual(res, { bad: 0, cells: 36 });
+  assert.deepEqual(res, { bad: 0, cells: 25 });
 });
 
 test("fixedOrder keeps the declared order and moves only what a constraint needs", () => {
@@ -47,7 +47,7 @@ test("with randomisation on, decision constraints still hold and every valid ord
   const r = plain(s.run(`(() => { const c = caseById(5), e = cardEdges(c), seen = {}; let broken = 0;
     for(let t = 0; t < 6000; t++){ const o = decisionOrderFor(c); if(!orderHolds(o, e)) broken++; seen[o.join()] = 1; }
     return {broken, distinct: Object.keys(seen).length}; })()`));
-  assert.deepEqual(r, { broken: 0, distinct: 60 });
+  assert.deepEqual(r, { broken: 0, distinct: 12 });
 });
 
 test("with a case constraint declared, the case order respects it", () => {

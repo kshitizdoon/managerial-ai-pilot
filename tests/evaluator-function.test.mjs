@@ -127,11 +127,10 @@ test("not enough eligible records: says so, stores nothing, makes nothing up", a
   await env(ON, async () => assert.equal((await fast.ev({ action: "assign", pid: "prod0" })).json.status, "not_enough"));
   await env({ ...ON, EVALUATOR_MIN_PRODUCER_MINUTES: "2" }, async () =>
     assert.equal((await fast.ev({ action: "assign", pid: "prod0" })).json.status, "assigned"));
-  /* records without reuse consent are left out unless the researcher admits them */
+  /* records without the structured reuse-consent field are admitted: eval-core.mjs
+     sets includeLegacyConsent on, because the researcher confirmed consent */
   const legacy = await setup(6, { consent: null });
-  await env(ON, async () => assert.equal((await legacy.ev({ action: "assign", pid: "prod0" })).json.status, "not_enough"));
-  await env({ ...ON, EVALUATOR_INCLUDE_LEGACY_CONSENT: "1" }, async () =>
-    assert.equal((await legacy.ev({ action: "assign", pid: "prod0" })).json.status, "assigned"));
+  await env(ON, async () => assert.equal((await legacy.ev({ action: "assign", pid: "prod0" })).json.status, "assigned"));
 });
 
 test("saving: checked against the assignment, same saveSeq rules, separate from the Producer record", async () => {
@@ -172,10 +171,8 @@ test("researcher GET needs the key and returns assignments, evaluations and the 
   });
 });
 
-test("a Producer who failed the attention check can still be rated, unless the researcher switches the rule on", async () => {
-  const { ev } = await setup(6, { attention: false });
-  await env(ON, async () => assert.equal((await ev({ action: "assign", pid: "prod0" })).json.status, "assigned"));
-  const again = await setup(6, { attention: false });
+test("there is no attention check any more: EVALUATOR_REQUIRE_ATTENTION changes nothing", async () => {
+  const { ev } = await setup(6);
   await env({ ...ON, EVALUATOR_REQUIRE_ATTENTION: "1" }, async () =>
-    assert.equal((await again.ev({ action: "assign", pid: "prod0" })).json.status, "not_enough"));
+    assert.equal((await ev({ action: "assign", pid: "prod0" })).json.status, "assigned"));
 });

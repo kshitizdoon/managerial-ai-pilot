@@ -2,7 +2,7 @@
    art.js — one small illustration per caselet, shown in its header.
 
    Same size, same flat style and the same five neutral colours for all
-   six. They set the scene only: no picture belongs to a decision, and
+   five. They set the scene only: no picture belongs to a decision, and
    none of the four action colours is used, so nothing here can point
    at an answer. Colours come from the --art-* tokens in styles.css.
    ============================================================= */
@@ -60,15 +60,5 @@ window.ART = {
     <rect class="a3" x="12" y="60" width="72" height="5"/>
     <path class="a3" d="M44 60l-6 12h6l4-6 4 6h6l-6-12z"/>
     <rect class="a4" x="24" y="38" width="12" height="4" rx="2"/><rect class="a4" x="21" y="36" width="4" height="8" rx="1"/><rect class="a4" x="35" y="36" width="4" height="8" rx="1"/>
-  </svg>`,
-
-  /* Day Before Travel: a suitcase, a plane and a clock */
-  travel: `<svg viewBox="0 0 96 96" role="img" aria-hidden="true">
-    <rect class="a0" width="96" height="96" rx="14"/>
-    <path class="a4" d="M30 20l38 10-4 4-10-1-8 9-4-1 4-10-10-3-4 3-3-1 3-5-3-3 3-1z"/>
-    <rect class="a1" x="18" y="46" width="40" height="34" rx="4"/>
-    <rect class="s2" x="30" y="40" width="16" height="7" rx="2" stroke-width="3"/>
-    <rect class="a2" x="26" y="46" width="4" height="34"/><rect class="a2" x="46" y="46" width="4" height="34"/>
-    <circle class="a2" cx="72" cy="66" r="13"/><path class="a5" d="M72 58v8l6 4" fill="none" stroke-width="2.5" stroke-linecap="round"/>
   </svg>`
 };

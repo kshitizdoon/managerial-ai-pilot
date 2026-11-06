@@ -30,11 +30,11 @@ async function settle(page){
 
 let fresh;   // one completed response from the current code, reused below
 
-test("a new response is stamped with the instrument, schema 3 and stable case ids", async () => {
+test("a new response is stamped with the instrument, schema 4 and stable case ids", async () => {
   const page = await env.newPage();
   const { record, seen } = await playSurvey(page, env.base);
   fresh = record;
-  assert.equal(record.schemaVersion, 3);
+  assert.equal(record.schemaVersion, 4);
   assert.deepEqual(record.instrument, META, "the browser computes the same fingerprints as Node");
   const shownIds = seen.map(s => plain(node.run(`CASES.find(c => c.name === ${JSON.stringify(s.name)}).id`)));
   assert.deepEqual(record.caseOrder, shownIds);
@@ -64,12 +64,12 @@ test("dashboard: counts, status tables, decisions, AI levels, raw JSON and CSV",
   await env.fn.post(earlierPilotRecord("oldpilot"));
   const unfinished = JSON.parse(JSON.stringify(fresh));
   unfinished.pid = "unfinished1"; unfinished.done = false;
-  delete unfinished.cases[fresh.caseOrder[5]].final;
+  delete unfinished.cases[fresh.caseOrder[4]].final;
   await env.fn.post(unfinished);
   const anomalous = JSON.parse(JSON.stringify(fresh));
   anomalous.pid = "anomalous1"; anomalous.saveReason = "finish";
-  delete anomalous.cases[fresh.caseOrder[4]];
-  delete anomalous.cases[fresh.caseOrder[5]].final;
+  delete anomalous.cases[fresh.caseOrder[3]];
+  delete anomalous.cases[fresh.caseOrder[4]].final;
   await env.fn.post(anomalous);
   const all = (await env.fn.get(KEY)).json.responses;
   const state = pid => plain(node.run(`recordState(${JSON.stringify(all.find(r => r.pid === pid))})`));
@@ -86,14 +86,16 @@ test("dashboard: counts, status tables, decisions, AI levels, raw JSON and CSV",
     new RegExp(`^${complete} completed responses?; ${unfinishedN} unfinished; 1 marked finished but incomplete; 1 from an earlier version`));
 
   const anomRows = await page.$$eval("#anomalous tr", t => t.map(r => [...r.children].map(c => c.textContent)));
-  assert.deepEqual(anomRows.slice(1).map(r => r.slice(0, 3)), [["anomalous1", "4/6", "5/6"]]);
+  assert.deepEqual(anomRows.slice(1).map(r => r.slice(0, 3)), [["anomalous1", "3/5", "4/5"]]);
   assert.ok((await page.$$eval("#unfinished tr td:first-child", t => t.map(x => x.textContent))).includes("unfinished1"));
   assert.deepEqual(await page.$$eval("#earlier tr td:first-child", t => t.map(x => x.textContent)), ["oldpilot"]);
   const versions = await page.$$eval("#versions tr", t => t.slice(1).map(r => [...r.children].map(c => c.textContent)));
   assert.deepEqual(versions.map(v => [v[0], v[7]]), [[META.instrumentVersion, "yes"]]);
 
-  assert.equal(await page.$$eval("#cases tr", t => t.length), 1 + 6);
-  assert.equal(await page.$$eval("#decisions tr", t => t.length), 1 + 30);
+  assert.equal(await page.$$eval("#cases tr", t => t.length), 1 + 5);
+  assert.equal(await page.$$eval("#decisions tr", t => t.length), 1 + 20);
+  assert.equal(await page.$("#attn"), null, "no attention-check block");
+  assert.doesNotMatch(await page.textContent("#app"), /What people said|Wait vs Hold clear|attention check/);
   assert.deepEqual(await page.$$eval("#levels tr td:first-child", t => t.map(x => x.textContent)), ["High", "Moderate", "Low", "Very low"]);
 
   /* raw JSON: every stored record, as stored */
@@ -106,10 +108,10 @@ test("dashboard: counts, status tables, decisions, AI levels, raw JSON and CSV",
   assert.equal(raw.counts.earlier_instrument, 1);
   assert.equal(raw.counts.anomalous, 1);
 
-  /* CSV: completed responses only, thirty rows each */
+  /* CSV: completed responses only, twenty rows each */
   const [csvDl] = await Promise.all([page.waitForEvent("download"), page.click("#csv")]);
   const lines = fs.readFileSync(await csvDl.path(), "utf8").split("\n");
-  assert.equal(lines.length, 1 + 30 * complete);
+  assert.equal(lines.length, 1 + 20 * complete);
   const pids = new Set(lines.slice(1).map(l => l.split(",")[0]));
   assert.ok(pids.has(fresh.pid));
   for (const p of ["anomalous1", "unfinished1", "oldpilot"]) assert.ok(!pids.has(p), p + " must not be in the CSV");
@@ -122,36 +124,6 @@ test("dashboard: counts, status tables, decisions, AI levels, raw JSON and CSV",
   await imp.click("#addr");
   await imp.waitForFunction(n => (document.getElementById("counts") || {}).textContent?.startsWith(n + " completed"), complete);
   assert.match(await imp.textContent("#counts"), /1 marked finished but incomplete; 1 from an earlier version/);
-});
-
-test("dashboard: respondents who fail the attention check can be left out of the statistics", async () => {
-  const solo = await setup();
-  try {
-    const ok = JSON.parse(JSON.stringify(fresh));
-    const bad = JSON.parse(JSON.stringify(fresh));
-    bad.pid = "inattentive"; bad.practice = { ...bad.practice, answers: { a: "own", b: "wait" }, correct: false };
-    await solo.fn.post(ok);
-    await solo.fn.post(bad);
-    const page = await solo.newPage();
-    await page.goto(solo.base + "/#researcher=" + KEY);
-    await page.waitForSelector("#attn");
-    assert.match(await page.textContent("#attn"), /^1 of 2 completed respondents answered both practice questions as expected\. Failed: inattentive\./);
-    const n = async () => page.$eval("#cases tr:nth-child(2) td:nth-child(2)", x => x.textContent);
-    assert.equal(await n(), "2");
-    await page.check("#exclAttn");
-    await page.waitForFunction(() => document.querySelector("#cases tr:nth-child(2) td:nth-child(2)").textContent === "1");
-    assert.match(await page.textContent("#counts"), /2 completed responses; .*1 left out of the statistics for failing the attention check/);
-    assert.equal(await page.isChecked("#exclAttn"), true);
-    /* the CSV keeps everyone, with the flag to filter on */
-    const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#csv")]);
-    const lines = fs.readFileSync(await dl.path(), "utf8").split("\n");
-    const col = lines[0].split(",").indexOf("attention_check_passed");
-    assert.ok(col > 0);
-    const flags = Object.fromEntries(lines.slice(1).map(l => l.split(",")).map(r => [r[0], r[col]]));
-    assert.deepEqual(flags, { [fresh.pid]: "1", inattentive: "0" });
-    await page.uncheck("#exclAttn");
-    await page.waitForFunction(() => document.querySelector("#cases tr:nth-child(2) td:nth-child(2)").textContent === "2");
-  } finally { await solo.close(); }
 });
 
 test("dashboard with no completed responses still lists the status tables and offers raw JSON", async () => {
@@ -167,7 +139,7 @@ test("dashboard with no completed responses still lists the status tables and of
     await page.waitForSelector("#anomalous");
     assert.match(await page.textContent("#app"), /No completed responses yet/);
     assert.match(await page.textContent("#counts"), /^0 completed responses; 0 unfinished; 1 marked finished but incomplete; 1 from an earlier version/);
-    assert.deepEqual(await page.$$eval("#anomalous tr:nth-child(2) td", t => t.slice(0, 3).map(x => x.textContent)), ["onlyanomalous", "5/6", "6/6"]);
+    assert.deepEqual(await page.$$eval("#anomalous tr:nth-child(2) td", t => t.slice(0, 3).map(x => x.textContent)), ["onlyanomalous", "4/5", "5/5"]);
     const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#json")]);
     const raw = JSON.parse(fs.readFileSync(await dl.path(), "utf8"));
     assert.deepEqual(raw.responses.map(r => r.pid).sort(), ["onlyanomalous", "onlyold"]);

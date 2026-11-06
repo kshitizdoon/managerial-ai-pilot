@@ -28,7 +28,7 @@ test("pre-AI ability matches the dashboard's scoring, with and without the shown
     for (const c of per.cases) {
       assert.equal(core.caseFirstScore(r, c.id), c.first);
       const others = per.cases.filter(x => x.id !== c.id).map(x => x.first);
-      assert.equal(core.mdaLoo(r, c.id), others.reduce((a, b) => a + b, 0) / 5);
+      assert.equal(core.mdaLoo(r, c.id), others.reduce((a, b) => a + b, 0) / 4);
     }
   }
   assert.equal(core.mda(makeRecord(site, { pid: "p", first: "pref" })), 100);
@@ -39,7 +39,8 @@ test("eligibility: only complete, valid, consented, unhurried records of this in
   const cases = [
     [ok, true, undefined],
     [makeRecord(site, { pid: "prog", done: false }), false, "not_complete"],
-    [makeRecord(site, { pid: "short", firsts: 5, finals: 5 }), false, "not_complete"],
+    [makeRecord(site, { pid: "short", firsts: 4, finals: 4 }), false, "not_complete"],
+    [makeRecord(site, { pid: "six", schema: 3 }), false, "earlier_instrument"],
     [earlierPilotRecord("old"), false, "earlier_instrument"],
     [makeRecord(site, { pid: "fast", totalMin: 4.9 }), false, "too_fast"],
     [makeRecord(site, { pid: "edge", totalMin: 5 }), true, undefined],
@@ -140,7 +141,7 @@ test("balance over evaluators: conditions by ability third, orders, caselets, tr
   const cs = count(a => a.slots.map(s => s.condition + ":" + s.stratum));
   assert.deepEqual(Object.values(cs), Array(9).fill(20));
   assert.deepEqual(Object.values(count(a => a.orderIndex)), Array(6).fill(10), "orders");
-  assert.deepEqual(Object.values(count(a => a.caseId)), Array(6).fill(10), "caselets");
+  assert.deepEqual(Object.values(count(a => a.caseId)), Array(5).fill(12), "caselets");
   const tr = Object.values(count(a => a.caseId + ":" + a.decisionIds.join()));
   assert.ok(Math.max(...tr) - Math.min(...tr) <= 1, "decision triples within one of each other");
   const exposure = Object.values(count(a => a.slots.map(s => s.target.pid)));

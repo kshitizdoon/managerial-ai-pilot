@@ -65,8 +65,7 @@ function personRows(raw){
         minA: (rec.msA || 0) / 60000, minB: (rec.msB || 0) / 60000, errs: (rec.errA || 0) + (rec.errB || 0),
         decisions};
     });
-    out.push({pid: r.pid, condition: r.aiCondition, bg: r.bg, end: r.end, pilot: r.pilot,
-      practiceCorrect: r.practice ? !!r.practice.correct : null,
+    out.push({pid: r.pid, condition: r.aiCondition, bg: r.bg,
       instrument: r.instrument || null,
       totalMin: r.totalMin != null ? r.totalMin : (new Date(r.finished) - new Date(r.started)) / 60000,
       cases, mda: mean(cases.map(x => x.first))});
@@ -86,13 +85,10 @@ function decisionRows(per){
 
 const LEVEL_NAMES = {high: "High", moderate: "Moderate", low: "Low", very_low: "Very low"};
 
-/* opts.excludeFailed leaves respondents who failed the attention check
-   (the two practice questions) out of every statistic on the page. */
 function renderDashboard(raw, live, sources, opts){
   opts = opts || {};
   const allPer = personRows(raw);
-  const failed = allPer.filter(p => p.practiceCorrect === false);
-  const per = opts.excludeFailed ? allPer.filter(p => p.practiceCorrect !== false) : allPer;
+  const per = allPer;
   const N = per.length;
   const byState = s => raw.filter(r => r && r.pid && recordState(r) === s);
   const incomplete = byState("in_progress"), anomalous = byState("anomalous"), earlier = byState("earlier_instrument");
@@ -113,15 +109,14 @@ function renderDashboard(raw, live, sources, opts){
    </table></div>` : "";
   const earlierRows = earlier.length ? `
    <h2>Responses from an earlier version of the survey</h2>
-   <p class="small muted">${earlier.length} record${earlier.length > 1 ? "s were" : " was"} saved by an earlier version (fixed action quotas, named delegates, different caselets). ${earlier.length > 1 ? "They are" : "It is"} kept, and in the raw JSON download, but not scored here: the manual says not to pool the two versions without a bridging analysis.</p>
+   <p class="small muted">${earlier.length} record${earlier.length > 1 ? "s were" : " was"} saved by an earlier version of the survey (other caselets or decisions, or fixed action quotas and named delegates). ${earlier.length > 1 ? "They are" : "It is"} kept, and in the raw JSON download, but not scored here: the manual says not to pool the two versions without a bridging analysis.</p>
    <div class="scroll"><table class="data" id="earlier">
      <tr><th>PID</th><th>Finished</th><th>Last checkpoint</th><th>Source</th></tr>
      ${earlier.map(r => `<tr><td>${esc(r.pid)}</td><td>${r.done ? "yes" : "no"}</td><td>${when(r)}</td><td>${esc((sources && sources[r.pid]) || "—")}</td></tr>`).join("")}
    </table></div>` : "";
   const versionRows = instrumentTable(raw.filter(r => recordState(r) !== "earlier_instrument"));
   const counts = `${allPer.length} completed response${allPer.length === 1 ? "" : "s"}; ${incomplete.length} unfinished; ${anomalous.length} marked finished but incomplete` +
-    (earlier.length ? `; ${earlier.length} from an earlier version` : "") +
-    (opts.excludeFailed && failed.length ? `; ${failed.length} left out of the statistics for failing the attention check` : "");
+    (earlier.length ? `; ${earlier.length} from an earlier version` : "");
   const rawButton = raw.length
     ? `<p><button class="ghost" id="json">Download raw JSON, every record as saved (${raw.length})</button></p>
        <p class="small muted">The raw file holds every record, finished or not, exactly as saved, including any names and mobile numbers participants gave.</p>` : "";
@@ -134,15 +129,11 @@ function renderDashboard(raw, live, sources, opts){
      <button class="ghost" id="clr">Clear added responses</button>
      <span class="small muted" id="addmsg"></span></p>
    </div>`;
-  const attention = allPer.length ? `
-   <h2>Attention check</h2>
-   <p class="small muted" id="attn">${allPer.length - failed.length} of ${allPer.length} completed respondents answered both practice questions as expected.${failed.length ? ` Failed: ${failed.map(p => esc(p.pid)).join(", ")}.` : ""}</p>
-   ${failed.length ? `<p class="small"><label><input type="checkbox" id="exclAttn"${opts.excludeFailed ? " checked" : ""}> Leave the ${failed.length} who failed it out of the statistics below</label></p>` : ""}` : "";
-  const statusBlocks = `${incompleteRows}${anomalousRows}${earlierRows}${versionRows}${attention}`;
+  const statusBlocks = `${incompleteRows}${anomalousRows}${earlierRows}${versionRows}`;
 
   if(!N){
     paint(`<h1>Survey results</h1>
-      <p>${allPer.length ? "No completed response is left once those who failed the attention check are left out" : "No completed responses yet"}${live && !live.ok ? ` — and the live data could not be loaded (${esc(live.why)}). Check the key in this link and DASHBOARD_KEY in Netlify.` : "."}</p>
+      <p>No completed responses yet${live && !live.ok ? ` — and the live data could not be loaded (${esc(live.why)}). Check the key in this link and DASHBOARD_KEY in Netlify.` : "."}</p>
       ${raw.length ? `<p class="muted" id="counts">${counts}.</p>` : ""}
       ${statusBlocks}
       ${rawButton}
@@ -207,14 +198,11 @@ function renderDashboard(raw, live, sources, opts){
   const sdD = sd(dI) || 1e-6;
   const abilityGain = corr(per.map(p => p.mda), dI);
   const aiGainCorr = corr(allCases.map(x => x.aiScore), allCases.map(x => x.gain));
-  const practiceRate = (() => { const v = per.map(p => p.practiceCorrect).filter(x => x !== null);
-    return v.length ? 100 * v.filter(Boolean).length / v.length : NaN; })();
 
   const flags = [];
   if(N >= 4){
-    if(!(alpha > 0.4)) flags.push(`Cronbach's alpha over the six case scores is ${fmt(alpha,2)}. The caselets are not yet measuring one thing; look at the decisions with low item-rest correlations first.`);
+    if(!(alpha > 0.4)) flags.push(`Cronbach's alpha over the ${J} case scores is ${fmt(alpha,2)}. The caselets are not yet measuring one thing; look at the decisions with low item-rest correlations first.`);
     if(med(times) > 25) flags.push(`Median run time is ${fmt(med(times))} minutes. Expect drop-out in the main run unless caselets are cut or shortened.`);
-    if(Number.isFinite(practiceRate) && practiceRate < 70) flags.push(`Only ${pct(practiceRate)} answered both Wait/Hold practice questions as expected. Either the distinction is not landing or people are not reading; look at the instructions before the main run.`);
     const hiTook = levelStats[0].took, loTook = levelStats[3].took;
     if(Number.isFinite(hiTook) && Number.isFinite(loTook) && Math.abs(hiTook - loTook) < 5)
       flags.push(`People switch to the AI's action at almost the same rate for high and very low advice (${pct(hiTook)} against ${pct(loTook)}). Either the advice quality is not visible or it is read as authority.`);
@@ -235,8 +223,7 @@ function renderDashboard(raw, live, sources, opts){
      <div><b>${fmt(med(times))}</b><span>median minutes</span></div>
      <div><b>${fmt(mean(per.map(p=>p.mda)))}</b><span>mean ability score (0-100)</span></div>
      <div><b>${fmt(sd(per.map(p=>p.mda)))}</b><span>SD between people</span></div>
-     <div><b>${fmt(alpha,2)}</b><span>alpha, 6 caselets</span></div>
-     <div><b>${pct(practiceRate)}</b><span>passed attention check</span></div>
+     <div><b>${fmt(alpha,2)}</b><span>alpha, ${J} caselets</span></div>
    </div>
 
    <h2>Is the instrument measuring one thing?</h2>
@@ -245,7 +232,7 @@ function renderDashboard(raw, live, sources, opts){
      ${caseStats.map(s=>`<tr><td>${esc(s.c.name)}</td><td>${s.n}</td><td>${fmt(s.mean)}</td><td>${fmt(s.sd)}</td>
        <td>${fmt(s.lo)}</td><td>${fmt(s.hi)}</td><td>${fmt(s.itemTotal,2)}</td><td>${fmt(s.minutes)}</td><td>${s.errs}</td></tr>`).join("")}
    </table></div>
-   <p class="small muted">Case score is the sum of five decision scores, 0 to 100, on the first answers. Alpha ${fmt(alpha,2)} implies a single-caselet reliability of ${fmt(r1,2)} and ${fmt(relLoo,2)} for the leave-one-caselet-out ability score.</p>
+   <p class="small muted">Case score is the sum of the ${CASES[0].decisions.length} decision scores, rescaled to 0 to 100, on the first answers. Alpha ${fmt(alpha,2)} implies a single-caselet reliability of ${fmt(r1,2)} and ${fmt(relLoo,2)} for the leave-one-caselet-out ability score.</p>
 
    <h2>Decisions</h2>
    <div class="scroll"><table class="data" id="decisions">
@@ -254,7 +241,7 @@ function renderDashboard(raw, live, sources, opts){
        ${ACTION_KEYS.map(a => `<td${a === s.pref ? ' style="font-weight:700"' : ""}>${pct(s.share[a])}</td>`).join("")}
        <td>${fmt(s.mean)}</td><td>${fmt(s.sd)}</td><td>${fmt(s.itemRest,2)}</td><td>${pct(s.changed)}</td></tr>`).join("")}
    </table></div>
-   <p class="small muted">Shares are of first answers; the preferred action's share is bold. Item-rest r correlates the decision's score with the other four decisions in its caselet.</p>
+   <p class="small muted">Shares are of first answers; the preferred action's share is bold. Item-rest r correlates the decision's score with the other decisions in its caselet.</p>
 
    <h2>What people did with the AI advice</h2>
    <div class="scroll"><table class="data" id="levels">
@@ -282,23 +269,11 @@ function renderDashboard(raw, live, sources, opts){
    ${flags.length ? `<h2>Fix before the main run</h2>${flags.map(f=>`<p class="flag">${esc(f)}</p>`).join("")}`
      : `<h2>No automatic flags</h2><p class="small muted">${N<4?"Too few responses to flag anything yet.":"Nothing tripped a threshold. Read the comments below anyway."}</p>`}
 
-   <h2>What people said</h2>
-   <div class="scroll"><table class="data">
-     <tr><td>Wait vs Hold clear</td><td style="text-align:left">${esc(tally(per.map(p=>p.pilot&&p.pilot.waitHold)))}</td></tr>
-     <tr><td>Length</td><td style="text-align:left">${esc(tally(per.map(p=>p.pilot&&p.pilot.length)))}</td></tr>
-     <tr><td>Hardest situation</td><td style="text-align:left">${esc(tally(per.map(p=>p.pilot&&p.pilot.hardest)))}</td></tr>
-     <tr><td>Used AI or help</td><td style="text-align:left">${esc(tally(per.map(p=>p.end&&p.end.aiHelp)))}</td></tr>
-     <tr><td>AI vs their own answers</td><td style="text-align:left">${esc(tally(per.map(p=>p.end&&p.end.compare)))}</td></tr>
-   </table></div>
-   ${list("What they think the study is testing", per.map(p=>p.end&&p.end.guess))}
-   ${list("Decisions that seemed obvious", per.map(p=>p.pilot&&p.pilot.obvious))}
-   ${list("Decisions hard to fit into the four actions", per.map(p=>p.pilot&&p.pilot.hardToFit))}
-   ${list("Why they kept or changed answers", [].concat(...per.map(p=>p.cases.map(c=>c.reason ? `${c.name}: ${c.reason}` : ""))))}
-   ${list("Other comments", per.map(p=>p.pilot&&p.pilot.other))}
+   ${list("Why people kept or changed their answers", [].concat(...per.map(p=>p.cases.map(c=>c.reason ? `${c.name}: ${c.reason}` : ""))))}
 
    <h2>Data</h2>
    <p><button class="ghost" id="csv">Download CSV, one row per person and decision</button></p>
-   <p class="small muted">The CSV is the analysis file: every completed response, scored with the key deployed now, with an attention_check_passed column to filter on.</p>
+   <p class="small muted">The CSV is the analysis file: every completed response, scored with the key deployed now.</p>
    ${rawButton}
    ${evaluatorSection(opts.ev)}
    ${importUI}
@@ -309,7 +284,6 @@ function renderDashboard(raw, live, sources, opts){
 
 function wireDash(per, raw, sources, live, opts){
   const $ = id => document.getElementById(id);
-  if($("exclAttn")) $("exclAttn").onchange = e => renderDashboard(raw, live, sources, {...(opts || {}), excludeFailed: e.target.checked});
   if($("csv")) $("csv").onclick = () => downloadFile("survey-decisions.csv", toCSV(per), "text/csv");
   if($("json")) $("json").onclick = () => downloadFile("survey-raw.json", JSON.stringify(rawExport(raw, sources), null, 1), "application/json");
   const ev = (opts || {}).ev;
@@ -403,7 +377,7 @@ function list(title, items){
    respondent, case, decision, first, final and AI action, AI condition
    and level, the exact AI text, response times, confidence, and the
    scoring-key version. */
-const CSV_HEAD = ["pid","ai_condition","programme","experience","managed","ai_use","undergrad","cat","attention_check_passed",
+const CSV_HEAD = ["pid","ai_condition","programme","experience","managed","ai_use","undergrad",
   "case_id","case_name","case_position","decision_id","decision_name","decision_position","preferred_action",
   "first_action","final_action","ai_action","ai_level","first_score","final_score","ai_action_score",
   "changed","disagreed_with_ai","took_ai",
@@ -420,8 +394,7 @@ function toCSV(per){
   decisionRows(per).forEach(({p, c, d, loo}) => {
     const I = p.instrument;
     const row = [p.pid, p.condition, p.bg&&p.bg.programme, p.bg&&p.bg.experience, p.bg&&p.bg.managed,
-      p.bg&&p.bg.aiUse, p.bg&&p.bg.undergrad, p.end&&p.end.cat != null ? p.end.cat : "",
-      p.practiceCorrect == null ? "" : b(p.practiceCorrect),
+      p.bg&&p.bg.aiUse, p.bg&&p.bg.undergrad,
       c.id, c.name, c.pos, d.k, d.n, d.pos, d.pref,
       d.first, d.final, d.ai, c.level, d.firstScore, d.finalScore, d.aiScore,
       b(d.changed), b(d.disagreed), b(d.tookAI),

@@ -9,37 +9,36 @@ const run = src => plain(site.run(src));
 /* If one of these changes, cases.js or key.js changed. That is allowed,
    but it is a new instrument version: rename CONFIG.instrumentVersion,
    regenerate docs, and update these two pins in the same commit. */
-const PINNED = { instrumentVersion: "survey-2026-10-round3", casesHash: "d15a62e9", keyHash: "5505a7da", scoringVersion: 2 };
+const PINNED = { instrumentVersion: "survey-2026-11-5x4", casesHash: "89a568b4", keyHash: "7733efcb", scoringVersion: 3 };
 
 test("instrumentMeta describes the deployed instrument", () => {
   const m = run("instrumentMeta()");
-  const levels = { high: 94, moderate: 74, low: 48, very_low: 22 };
+  const levels = { high: 92.5, moderate: 67.5, low: 35, very_low: 27.5 };
   assert.deepEqual(m, {
     instrumentVersion: PINNED.instrumentVersion,
     scoringVersion: PINNED.scoringVersion,
     casesHash: PINNED.casesHash,
     keyHash: PINNED.keyHash,
-    scoringConfig: { decisionMax: 20, caseMax: 100 },
-    caseIds: [3, 2, 5, 4, 1, 6],
+    scoringConfig: { decisionMax: 20, caseMax: 100, decisionsPerCase: 4 },
+    caseIds: [3, 2, 5, 4, 1],
     decisionIds: {
-      3: ["escalation", "expansion", "recommendation", "recovery", "career"],
-      2: ["presentation", "funding", "partner", "appointment", "review"],
-      5: ["registration", "sponsor", "staffing", "venue", "programming"],
-      4: ["escalation", "weekend", "guarantee", "process", "recovery"],
-      1: ["corporate", "announcement", "readiness", "trainers", "roles"],
-      6: ["client", "handover", "opportunity", "development", "review"] },
+      3: ["expansion", "recommendation", "recovery", "career"],
+      2: ["presentation", "funding", "partner", "review"],
+      5: ["registration", "sponsor", "venue", "programming"],
+      4: ["escalation", "guarantee", "process", "recovery"],
+      1: ["corporate", "announcement", "readiness", "trainers"] },
     aiLevels: ["high", "moderate", "low", "very_low"],
     aiConditions: 4,
-    aiScores: { 1: levels, 2: levels, 3: levels, 4: levels, 5: levels, 6: levels }
+    aiScores: { 1: levels, 2: levels, 3: levels, 4: levels, 5: levels }
   });
-  assert.equal(run("RECORD_SCHEMA"), 3);
+  assert.equal(run("RECORD_SCHEMA"), 4);
 });
 
 test("fingerprints ignore key order and catch any content change", () => {
   assert.equal(run(`fingerprint({a:1, b:[1,{c:2, d:3}]})`), run(`fingerprint({b:[1,{d:3, c:2}], a:1})`));
   assert.notEqual(run(`fingerprint({a:1})`), run(`fingerprint({a:2})`));
   const s = loadSite();
-  s.run("KEY[3].escalation.own = 16");
+  s.run("KEY[3].expansion.own = 16");
   assert.notEqual(plain(s.run("instrumentMeta().keyHash")), PINNED.keyHash);
   assert.equal(plain(s.run("instrumentMeta().casesHash")), PINNED.casesHash);
   const c = loadSite();
@@ -58,19 +57,19 @@ test("sameInstrument: true for this version, false for another, null when not re
 
 test("checkKey refuses duplicate case ids", () => {
   const s = loadSite();
-  s.run("caseById(6).id = 5");
+  s.run("caseById(1).id = 5");
   assert.match(plain(s.run("checkKey()")).join("\n"), /case id 5 is used twice/);
 });
 
 test("caseSequence follows stored case ids, and positions for older records", () => {
-  assert.deepEqual(run(`caseSequence({caseOrder:[3,1,6,2,5,4], order:[0,1,2,3,4,5]}).map(c => c.id)`), [3, 1, 6, 2, 5, 4]);
-  assert.deepEqual(run(`caseSequence({order:[2,0,5,1,4,3]}).map(c => c.id)`), [5, 3, 6, 2, 1, 4]);
+  assert.deepEqual(run(`caseSequence({caseOrder:[3,1,2,5,4], order:[0,1,2,3,4]}).map(c => c.id)`), [3, 1, 2, 5, 4]);
+  assert.deepEqual(run(`caseSequence({order:[2,0,1,4,3]}).map(c => c.id)`), [5, 3, 2, 1, 4]);
 });
 
 test("reordering CASES does not move a new record to other cases", () => {
   const s = loadSite();
   s.run("CASES.reverse()");
-  assert.deepEqual(plain(s.run(`caseSequence({caseOrder:[3,1,6,2,5,4], order:[2,0,5,1,4,3]}).map(c => c.id)`)), [3, 1, 6, 2, 5, 4]);
+  assert.deepEqual(plain(s.run(`caseSequence({caseOrder:[3,1,2,5,4], order:[2,0,1,4,3]}).map(c => c.id)`)), [3, 1, 2, 5, 4]);
   /* an older record only has positions, which is exactly why ids are stored now */
-  assert.deepEqual(plain(s.run(`caseSequence({order:[2,0,5,1,4,3]}).map(c => c.id)`)), [4, 6, 3, 1, 2, 5]);
+  assert.deepEqual(plain(s.run(`caseSequence({order:[2,0,1,4,3]}).map(c => c.id)`)), [5, 1, 4, 3, 2]);
 });

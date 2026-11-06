@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { setup, playSurvey } from "./helpers/browser.mjs";
+import { setup, playSurvey, aboutYou } from "./helpers/browser.mjs";
 import { loadSite, plain } from "./helpers/load.mjs";
 import { makeRecord } from "./helpers/records.mjs";
 
@@ -29,7 +29,7 @@ const stored = (env, store, id) => { const r = env.fn.all.db(store).get(id); ret
 /* finish Part 1 and land on the Part 2 offer */
 async function finishPart1(env, page){
   const { record } = await playSurvey(page, env.base, { finish: false });
-  for (const id of ["e1", "e2", "f1", "f2", "f5"]) await page.selectOption("#" + id, { index: 1 });
+  await aboutYou(page);
   await page.click("#next");
   return record;
 }

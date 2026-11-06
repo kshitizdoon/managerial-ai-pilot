@@ -7,9 +7,9 @@ window.CONFIG = {
   /* ---- AI advice ---------------------------------------------------------
      Every caselet has advice at four quality levels (cases.js). Each
      respondent is given one of four conditions at random, and the
-     condition rotates the levels across the six caselets: caselet i (in
+     condition rotates the levels across the five caselets: caselet i (in
      cases.js order) gets level (i + condition) mod 4. So every respondent
-     sees all four levels, two of them twice, and across the four
+     sees all four levels, one of them twice, and across the four
      conditions every caselet appears at every level exactly once.
      ?ai=0 .. ?ai=3 in the link forces a condition, for testing.          */
   aiConditions: 4,
@@ -23,15 +23,14 @@ window.CONFIG = {
      and that lands in the outcome you are measuring.                       */
   contactAt: "end",
 
-  /* ---- Fielding --------------------------------------------------------ies */
-  randomiseCaseOrder: true,       // order of the six caselets
-  randomiseDecisionOrder: false,  // order of the five decisions: as numbered in the manual
-  showPilotQuestions: true,   // the "help us fix the survey" block
+  /* ---- Fielding -------------------------------------------------------- */
+  randomiseCaseOrder: true,       // order of the five caselets
+  randomiseDecisionOrder: false,  // order of the four decisions: as numbered in the manual
 
   /* ---- Where responses go ---------------------------------------------
      Netlify Function + Blobs is the only server store. The survey saves
-     after About you, after every caselet's first answers, after every
-     caselet's final answers, and at Finish, and retries failed saves.
+     at Start, after every caselet's first answers, after every caselet's
+     final answers, and at Finish, and retries failed saves.
      localStorage is a browser backup.
      "local" (set by build.py for the single-file bundle) skips the server. */
   storage: "function",
@@ -43,8 +42,10 @@ window.CONFIG = {
      text that says decisions may be shown, anonymously, to other
      participants for rating. Part 2 (the Evaluator stage) only shows
      Producers with version 2 or later, unless the researcher sets
-     EVALUATOR_INCLUDE_LEGACY_CONSENT=1 in Netlify after approval.       */
-  consentVersion: 2,
+     EVALUATOR_INCLUDE_LEGACY_CONSENT=1 in Netlify after approval.
+     Version 3 is the short welcome text of November 2026; it keeps that
+     sentence.                                                            */
+  consentVersion: 3,
 
   /* The results view is at  yoursite.netlify.app/#researcher=KEY
      KEY is the DASHBOARD_KEY environment variable in Netlify. Keep it
@@ -57,7 +58,7 @@ window.CONFIG = {
      response and never changed afterwards. Give it a new name whenever
      you edit cases.js, key.js or the scoring, so responses collected
      under different versions can be told apart.                          */
-  instrumentVersion: "survey-2026-10-round3",
+  instrumentVersion: "survey-2026-11-5x4",
 
   /* ---- Copy ------------------------------------------------------------ */
   studyTitle: "Managerial Decision Survey",

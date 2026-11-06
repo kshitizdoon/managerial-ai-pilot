@@ -1,10 +1,10 @@
 /* =============================================================
    survey.js — the respondent's side.
 
-   Flow: welcome and consent, About you, how it works, a Wait/Hold
-   practice question, then for each of six caselets: five first answers,
-   then the AI advice beside each decision with five final answers and
-   an optional confidence and reason. Last questions, thank you.
+   Flow: welcome and consent, how it works, then for each of five
+   caselets: four first answers, then the AI advice beside each decision
+   with four final answers and an optional confidence and reason. About
+   you and the optional prize-draw details on the last page, thank you.
    ============================================================= */
 
 const app = () => document.getElementById("app");
@@ -171,75 +171,71 @@ function readContact(){
 
 function welcome(){
   setStep("Welcome", 0);
+  const nd = CASES[0].decisions.length;
   paint(`
    <h1>${esc(CONFIG.studyTitle)}</h1>
-   <p class="serif lead">You will be given six situations. Each situation has five decisions. For each decision you choose one of four actions: Own, Delegate, Wait or Hold.</p>
-   <p class="serif">You decide which decisions to make yourself now, which to hand to someone on your team, and which to leave for later or until something you need is in place.</p>
-   <p class="serif">After your answers are recorded, an AI advisor shows its recommendations for the same five decisions. You then give your final answers.</p>
-   <div class="card small">
-     <p>Please do it in one sitting, without breaks and without looking anything up.</p>
-     <p>Your answers are used for a student research project at IIM Ahmedabad. You are not asked who you are while you work through the situations.</p>
-     <p>At the end you can leave a name and mobile number to enter the prize draw. That is optional, and if you give it, it is saved with your answers rather than kept apart from them.</p>
-     <p>Your decisions may later be shown to other participants in this study, who will be asked to rate them. They will never see your name, contact details or answers about yourself.</p>
-     <p style="margin:0">There are no trick questions and no right answer you are expected to guess.</p>
-   </div>
+   <p class="serif lead">You will be put in ${CASES.length} situations, with ${nd} decisions in each. For each decision, choose one of four actions: Own, Delegate, Wait or Hold.</p>
+   <p class="serif">After your answers are recorded, an AI advisor will show its recommendations. You can give your final answers after checking them.</p>
+   <p class="serif">Sometimes it may be difficult to decide which action to choose. Try to answer honestly and spontaneously.</p>
+   <p class="serif">At the end you can leave a name and mobile number to enter the prize draw. It is optional.</p>
+   <p class="small muted">Your decisions may be shown anonymously to other participants in this study, who will rate them.</p>
    ${CONFIG.contactAt === "start" ? contactHTML() : ""}
    <p class="err" id="e"></p>
    <button class="go" id="begin">Start</button>`);
   document.getElementById("begin").onclick = () => {
     if(CONFIG.contactAt === "start" && !readContact()) return;
-    background();
+    beginResponse();
   };
 }
 
-function background(){
-  setStep("About you", 4);
-  const q = (id,label,opts) => `<h3>${label}</h3><select id="${id}"><option value="">Choose one</option>${opts.map(o=>`<option>${o}</option>`).join("")}</select>`;
-  paint(`
-   <h2>About you</h2>
+/* The response record starts here, when the respondent presses Start.
+   About you is asked on the last page. */
+function beginResponse(){
+  const url = new URLSearchParams(location.search);
+  const order = caseOrder();
+  const forced = parseInt(url.get("ai"), 10);
+  const condition = forced >= 0 && forced < CONFIG.aiConditions ? forced : Math.floor(Math.random() * CONFIG.aiConditions);
+  ST = {
+    pid: uid(),
+    /* treatment: set once here. aiLevels[caseId] is the quality level
+       of the advice that caselet shows this respondent. */
+    aiCondition: condition,
+    aiLevels: aiAssignment(condition),
+    started: new Date().toISOString(),
+    bg: null,
+    /* caseOrder holds case ids and is what the survey follows. order
+       (positions in CASES) is kept for readers of older records. */
+    caseOrder: order.map(i => CASES[i].id),
+    order,
+    at: 0, cases: {}, msWelcome: since(), done: false,
+    contact: window.__contact || null,
+    /* what the welcome screen told this person, including that their
+       decisions may be shown, anonymously, to other participants */
+    consent: {version: CONFIG.consentVersion, reuseForEvaluation: true},
+    /* set once here, never changed: which cases, key and scoring this
+       response was collected under */
+    schemaVersion: RECORD_SCHEMA,
+    instrument: instrumentMeta()
+  };
+  saveLocal(ST);
+  checkpointResponse(ST, "start");
+  route();
+}
+
+/* About you: five questions, on the last page */
+const ABOUT_YOU = [
+  ["programme",  "Programme", ["PGP year 1","PGP year 2","PGPX","PhD or FPM","Other student","Working professional"]],
+  ["experience", "Full-time work experience", ["None","Under 1 year","1 to 2 years","2 to 4 years","More than 4 years"]],
+  ["managed",    "Have you managed or led other people at work?", ["No","Yes, informally","Yes, formally"]],
+  ["aiUse",      "How often do you use AI tools such as ChatGPT?", ["Rarely or never","A few times a month","A few times a week","Daily"]],
+  ["undergrad",  "Undergraduate background", ["Engineering or science","Commerce or economics","Arts or humanities","Medicine","Other"]]
+];
+function aboutYouHTML(){
+  return `<h2>About you</h2>
    <p class="muted small">Five quick questions.</p>
    <div class="card">
-     ${q("q1","Programme",["PGP year 1","PGP year 2","PGPX","PhD or FPM","Other student","Working professional"])}
-     ${q("q2","Full-time work experience",["None","Under 1 year","1 to 2 years","2 to 4 years","More than 4 years"])}
-     ${q("q3","Have you managed or led other people at work?",["No","Yes, informally","Yes, formally"])}
-     ${q("q4","How often do you use AI tools such as ChatGPT?",["Rarely or never","A few times a month","A few times a week","Daily"])}
-     ${q("q5","Undergraduate background",["Engineering or science","Commerce or economics","Arts or humanities","Medicine","Other"])}
-   </div>
-   <p class="err" id="e"></p>
-   <button class="go" id="next">Continue</button>`);
-  document.getElementById("next").onclick = () => {
-    const v = [1,2,3,4,5].map(i => document.getElementById("q"+i).value);
-    if(v.some(x => !x)){ document.getElementById("e").textContent = "Please answer all five."; return; }
-    const url = new URLSearchParams(location.search);
-    const order = caseOrder();
-    const forced = parseInt(url.get("ai"), 10);
-    const condition = forced >= 0 && forced < CONFIG.aiConditions ? forced : Math.floor(Math.random() * CONFIG.aiConditions);
-    ST = {
-      pid: uid(),
-      /* treatment: set once here. aiLevels[caseId] is the quality level
-         of the advice that caselet shows this respondent. */
-      aiCondition: condition,
-      aiLevels: aiAssignment(condition),
-      started: new Date().toISOString(),
-      bg: {programme:v[0], experience:v[1], managed:v[2], aiUse:v[3], undergrad:v[4]},
-      /* caseOrder holds case ids and is what the survey follows. order
-         (positions in CASES) is kept for readers of older records. */
-      caseOrder: order.map(i => CASES[i].id),
-      order,
-      at: 0, cases: {}, msBg: since(), done: false,
-      contact: window.__contact || null,
-      /* what the welcome screen told this person, including that their
-         decisions may be shown, anonymously, to other participants */
-      consent: {version: CONFIG.consentVersion, reuseForEvaluation: true},
-      /* set once here, never changed: which cases, key and scoring this
-         response was collected under */
-      schemaVersion: RECORD_SCHEMA,
-      instrument: instrumentMeta()
-    };
-    saveLocal(ST);
-    checkpointResponse(ST, "background_complete");
-    route();
-  };
+     ${ABOUT_YOU.map(([, label, opts], i) => `<h3>${label}</h3><select id="q${i+1}"><option value="">Choose one</option>${opts.map(o=>`<option>${o}</option>`).join("")}</select>`).join("")}
+   </div>`;
 }
 
 /* the four actions with their full definitions */
@@ -252,8 +248,7 @@ function definitionsHTML(){
 function whoWhenHTML(){
   return `<table class="whowhen"><thead><tr><th></th><th>Who decides?</th><th>When?</th></tr></thead><tbody>
     ${ACTIONS.map(([k, n,,, who, when]) => `<tr data-a="${k}"><th scope="row">${n}</th><td>${esc(who)}</td><td>${esc(when)}</td></tr>`).join("")}
-  </tbody></table>
-  <p class="example">${esc(OWN_VS_DELEGATE)}</p>`;
+  </tbody></table>`;
 }
 
 function howItWorks(){
@@ -268,43 +263,6 @@ function howItWorks(){
    <p class="small muted">Your first answers in each situation are saved before you see the AI advisor, and cannot be changed afterwards. You can still choose different final answers.</p>
    <button class="go" id="next">I am ready</button>`);
   document.getElementById("next").onclick = () => { ST.msIntro = since(); saveLocal(ST); route(); };
-}
-
-/* ------------------------------------------------------------- practice */
-/* One practice screen, two questions on Wait versus Hold. Not scored.
-   The answers and whether they matched are kept: both right is the
-   attention check. */
-function practice(){
-  setStep("Practice", 9);
-  const n = PRACTICE.items.length;
-  paint(`
-   <h2>Practice</h2>
-   <p class="muted">Two practice questions before the first situation. They are not scored, but please read them carefully.</p>
-   <div class="decisions">${PRACTICE.items.map((d, i) =>
-     decisionCard(d, `Practice ${i+1} of ${n}`, "p")).join("")}</div>
-   <div id="fb" class="card hide"><p style="margin:0" class="serif">${esc(PRACTICE.feedback)}</p></div>
-   <p class="err" id="e"></p>
-   <button class="go" id="next">Check my answers</button>`);
-  const t = wireDecisions("p");
-  let checked = false;
-  document.getElementById("next").onclick = () => {
-    const ans = readDecisions(PRACTICE.items, "p");
-    if(!checked){
-      if(!requireAll(PRACTICE.items, ans)) return;
-      checked = true;
-      /* the attention check: both answers right */
-      ST.practice = {answers: ans, correct: PRACTICE.items.every(d => ans[d.k] === d.answer),
-                     itemCorrect: Object.fromEntries(PRACTICE.items.map(d => [d.k, ans[d.k] === d.answer])),
-                     ms: since(), times: t()};
-      app().querySelectorAll(".decision input").forEach(x => { x.disabled = true; });
-      document.getElementById("fb").classList.remove("hide");
-      document.getElementById("next").textContent = "Continue";
-      saveLocal(ST);
-      return;
-    }
-    ST.practice.msFeedback = since();
-    saveLocal(ST); route();
-  };
 }
 
 /* ---------------------------------------------------------------- order */
@@ -332,7 +290,6 @@ function caseSequence(rec){
 /* ------------------------------------------------------------------ route */
 function route(){
   if(ST.msIntro == null) return howItWorks();
-  if(!ST.practice || ST.practice.msFeedback == null) return practice();
   const seq = caseSequence(ST);
   if(ST.at >= seq.length) return closing();
   const c = seq[ST.at];
@@ -422,11 +379,13 @@ function requireAll(list, ans){
   if(first && first.scrollIntoView) first.scrollIntoView({behavior:"smooth", block:"center"});
   return false;
 }
+/* the progress bar: 10% after the instructions, 90% at the last page */
+const progress = (at, half) => Math.round(10 + (at + half / 2) * 80 / CASES.length);
 const ordered = (c, rec) => rec.decisionOrder.map(k => c.decisions.find(d => d.k === k));
 
 /* first answers --------------------------------------------------------- */
 function pageFirst(c, rec){
-  setStep(`Situation ${ST.at+1} of ${CASES.length}`, 12 + ST.at*13);
+  setStep(`Situation ${ST.at+1} of ${CASES.length}`, progress(ST.at, 0));
   const list = ordered(c, rec);
   paint(`${situationHeader(c)}
    <h3 class="part">Your first answers</h3>
@@ -459,7 +418,7 @@ function confidenceHTML(){
 }
 
 function pageFinal(c, rec){
-  setStep(`Situation ${ST.at+1} of ${CASES.length}`, 18 + ST.at*13);
+  setStep(`Situation ${ST.at+1} of ${CASES.length}`, progress(ST.at, 1));
   const list = ordered(c, rec);
   const level = ST.aiLevels[c.id];
   const ai = aiPlan(c, level);
@@ -470,7 +429,7 @@ function pageFinal(c, rec){
   const shown = rec.ai;
   paint(`${situationHeader(c)}
    <h3 class="part">AI advice and your final answers</h3>
-   <p class="small muted">Your first answers are saved and cannot be changed. An AI advisor looked at the same five decisions; its recommendation is under each one. Your first answers are selected below. Change any you want.</p>
+   <p class="small muted">Your first answers are saved and cannot be changed. An AI advisor looked at the same ${list.length} decisions; its recommendation is under each one. Your first answers are selected below. Change any you want.</p>
    <div class="decisions fade">${list.map((d, i) => decisionCard(d, `Decision ${i+1} of ${list.length}`, "b",
      `<div class="compare">
         <div class="mine"><span class="tag">Your first answer</span><b data-a="${rec.first[d.k]}">${actionLabel(rec.first[d.k])}</b></div>
@@ -497,43 +456,17 @@ function pageFinal(c, rec){
 
 /* closing ----------------------------------------------------------------- */
 function closing(){
-  setStep("Last few questions", 92);
-  const sel = (id,label,opts) => `<h3>${label}</h3><select id="${id}"><option value="">Choose one</option>${opts.map(o=>`<option>${o}</option>`).join("")}</select>`;
+  setStep("Last page", 92);
   paint(`
-   <h2>Last few questions</h2>
-   <div class="card">
-     ${sel("e1","While answering, did you use ChatGPT or another AI tool, or ask anyone for help?",["No","Yes, for some situations","Yes, for most situations"])}
-     <p class="small muted" style="margin:.3rem 0 0">Your answer changes nothing for you.</p>
-     ${sel("e2","Overall, how did the AI advisor's recommendations compare with yours?",["Mostly better","About the same","Mostly worse","Some better, some worse"])}
-     <h3>In one line, what do you think this study is testing?</h3>
-     <textarea id="e3"></textarea>
-     <h3>Your CAT overall percentile (optional)</h3>
-     <input type="number" id="e4" min="0" max="100" step="0.01" placeholder="e.g. 98.5">
-   </div>
+   ${aboutYouHTML()}
    ${CONFIG.contactAt === "end" ? contactHTML() : ""}
-   ${CONFIG.showPilotQuestions ? `
-   <h2 style="margin-top:1.8rem">Help us fix the survey</h2>
-   <div class="card">
-     ${sel("f1","Which situation was hardest to decide?", CASES.map(c=>c.name).concat(["None stood out"]))}
-     ${sel("f2","Was the difference between Wait and Hold clear?",["Clear","Somewhat clear","Not clear"])}
-     <h3>Did any decision seem to have an obvious answer? Which one, and what gave it away?</h3>
-     <textarea id="f3"></textarea>
-     <h3>Was any decision hard to fit into the four actions? Which one?</h3>
-     <textarea id="f4"></textarea>
-     ${sel("f5","How did the length feel?",["Too long","About right","Too short"])}
-     <h3>Anything else we should change?</h3>
-     <textarea id="f6"></textarea>
-   </div>` : ""}
    <p class="err" id="e"></p>
    <button class="go" id="next">Finish</button>`);
   document.getElementById("next").onclick = async () => {
-    const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
-    const required = CONFIG.showPilotQuestions ? ["e1","e2","f1","f2","f5"] : ["e1","e2"];
-    if(required.some(id => !g(id))){ document.getElementById("e").textContent = "Please answer the dropdown questions."; return; }
+    const v = ABOUT_YOU.map((_, i) => document.getElementById("q" + (i+1)).value);
+    if(v.some(x => !x)){ document.getElementById("e").textContent = "Please answer all five questions about you."; return; }
     if(CONFIG.contactAt === "end"){ readContact(); ST.contact = window.__contact || null; }
-    ST.end = {aiHelp:g("e1"), compare:g("e2"), guess:g("e3"), cat: g("e4") ? +g("e4") : null};
-    if(CONFIG.showPilotQuestions)
-      ST.pilot = {hardest:g("f1"), waitHold:g("f2"), obvious:g("f3"), hardToFit:g("f4"), length:g("f5"), other:g("f6")};
+    ST.bg = Object.fromEntries(ABOUT_YOU.map(([k], i) => [k, v[i]]));
     ST.msEnd = since(); ST.finished = new Date().toISOString(); ST.done = true;
     ST.totalMin = Math.round(((new Date(ST.finished) - new Date(ST.started))/60000)*10)/10;
     saveLocal(ST);

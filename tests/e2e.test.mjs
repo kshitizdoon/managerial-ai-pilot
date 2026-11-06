@@ -2,31 +2,37 @@
    /api/responses (in-memory store). Needs a Chromium; see helpers/browser.mjs. */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { setup, playSurvey } from "./helpers/browser.mjs";
+import { setup, playSurvey, aboutYou } from "./helpers/browser.mjs";
 import { loadSite, plain } from "./helpers/load.mjs";
 
 const node = loadSite();
 const nrun = s => plain(node.run(s));
-const CASE_NAMES = ["Monday Project Team", "Strong Employee", "Fest Week", "Friday Support Team", "Launch Morning", "Day Before Travel"];
+const CASE_NAMES = ["Monday Project Team", "Strong Employee", "Fest Week", "Friday Support Team", "Launch Morning"];
 
 let env;
 test.before(async () => { env = await setup(); });
 test.after(async () => { if (env) await env.close(); });
 
-test("page boots with no instrument warnings or script errors; welcome asks for one sitting", async () => {
+test("page boots with no instrument warnings or script errors; the welcome text is short", async () => {
   const page = await env.newPage();
   await page.goto(env.base + "/?new=1");
   await page.waitForSelector("#begin");
   assert.equal(await page.$(".devwarn"), null);
   const text = await page.textContent("#app");
   assert.match(text, /Managerial Decision Survey/);
-  assert.match(text, /one sitting/);
+  assert.match(text, /You will be put in 5 situations, with 4 decisions in each\./);
+  assert.match(text, /Own, Delegate, Wait or Hold/);
+  assert.match(text, /an AI advisor will show its recommendations/);
+  assert.match(text, /Try to answer honestly and spontaneously\./);
+  assert.match(text, /prize draw\. It is optional\./);
+  assert.match(text, /shown anonymously to other participants/);
+  assert.doesNotMatch(text, /IIM Ahmedabad|no trick questions/);
   assert.doesNotMatch(text, /stop at any time/i);
   assert.doesNotMatch(text, /closing the page/i);
   assert.deepEqual(page.errors, []);
 });
 
-test("full run: six caselets, five decisions each in the manual's order, advice as assigned, checkpoints land", async () => {
+test("full run: five caselets, four decisions each in the manual's order, advice as assigned, About you last, checkpoints land", async () => {
   const page = await env.newPage();
   const before = env.api.posts.length;
   const { seen, record } = await playSurvey(page, env.base, { query: "?new=1&ai=1" });
@@ -56,55 +62,79 @@ test("full run: six caselets, five decisions each in the manual's order, advice 
       score: nrun(`aiPlanScore(caseById(${id}), ${JSON.stringify(record.aiLevels[id])})`) });
     assert.deepEqual(rec.decisionOrder, s.keys);
     assert.equal(rec.conf, 3);
-    assert.equal(Object.keys(rec.tA).length, 5);
+    assert.equal(Object.keys(rec.tA).length, 4);
   }
-  assert.deepEqual(record.practice.answers, { a: "wait", b: "hold" });
-  assert.equal(record.practice.correct, true);
+  assert.equal(record.practice, undefined, "no practice questions");
+  assert.equal(record.end, undefined, "no last-few-questions block");
+  assert.equal(record.pilot, undefined, "no help-us-fix block");
+  assert.deepEqual(Object.keys(record.bg), ["programme", "experience", "managed", "aiUse", "undergrad"]);
+  assert.equal(record.consent.version, 3);
 
   const shownIds = seen.map(s => nrun(`CASES.find(c => c.name === ${JSON.stringify(s.name)}).id`));
   assert.deepEqual(record.caseOrder, shownIds);
   const posts = env.api.posts.slice(before);
-  const expected = ["background_complete"];
+  const expected = ["start"];
   shownIds.forEach(id => expected.push(`case_${id}_first_plan`, `case_${id}_complete`));
   expected.push("finish");
   assert.deepEqual(posts.map(p => p.saveReason), expected);
   assert.deepEqual(posts.map(p => p.saveSeq), expected.map((_, i) => i + 1));
   assert.ok(posts.every(p => p.pid === record.pid), "one PID across all checkpoints");
-  assert.deepEqual(posts.map(p => p.casesCompleted), [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6]);
+  assert.deepEqual(posts.map(p => p.casesCompleted), [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
+  assert.equal(posts[0].bg, null, "About you is not asked at the start");
+  assert.ok(posts[posts.length - 1].bg && posts[posts.length - 1].bg.programme, "it arrives with the finished response");
 
   const srv = env.fn.stored(record.pid);
   assert.equal(srv.status, "complete");
-  assert.equal(srv.saveSeq, 14);
+  assert.equal(srv.saveSeq, 12);
   assert.equal(record.savedVia, "function");
 });
 
 test("every respondent sees all four advice levels", async () => {
   const page = await env.newPage();
-  const { record } = await playSurvey(page, env.base, { finish: false, stopAfterCases: 6 });
+  const { record } = await playSurvey(page, env.base, { finish: false });
   const levels = Object.values(record.cases).map(c => c.ai.level);
   assert.deepEqual([...new Set(levels)].sort(), ["high", "low", "moderate", "very_low"]);
   assert.ok(record.aiCondition >= 0 && record.aiCondition < 4);
 });
 
-test("a wrong practice answer is kept, shown the explanation, and does not block", async () => {
+test("no practice screen: how it works leads straight to the first caselet", async () => {
   const page = await env.newPage();
-  await playSurvey(page, env.base, { stopAfterCases: 0, finish: false, practice: ["hold", "wait"] });
-  const rec = await page.evaluate(() => ST.practice);
-  assert.deepEqual(rec.answers, { a: "hold", b: "wait" });
-  assert.equal(rec.correct, false);
-  assert.ok(await page.isVisible(".sit h2"), "moved on to the first caselet");
+  await playSurvey(page, env.base, { stopAfterCases: 0, finish: false });
+  assert.ok(await page.isVisible(".sit h2"), "on the first caselet");
+  assert.match(await page.textContent("#step"), /Situation 1 of 5/);
+  assert.equal(await page.evaluate(() => ST.practice), undefined);
+});
+
+test("the last page asks only About you and the prize draw, and needs all five answers", async () => {
+  const page = await env.newPage();
+  await playSurvey(page, env.base, { finish: false });
+  const text = await page.textContent("#app");
+  assert.match(text, /About you/);
+  assert.match(text, /For the prize draw/);
+  assert.doesNotMatch(text, /Help us fix the survey|Last few questions|CAT overall percentile|ChatGPT or another AI tool/);
+  assert.equal(await page.$$eval("select", e => e.length), 5);
+  await page.click("#next");
+  assert.match(await page.textContent("#e"), /answer all five/);
+  await aboutYou(page);
+  await page.fill("#nm", "A Person");
+  await page.click("#next");
+  await page.waitForSelector("h1:text('Thank you')");
+  const rec = await page.evaluate(() => ST);
+  assert.equal(rec.done, true);
+  assert.equal(rec.contact.name, "A Person");
+  assert.equal(rec.bg.programme, "PGP year 1");
 });
 
 test("saving with a decision unanswered is blocked and points at it", async () => {
   const page = await env.newPage();
   await playSurvey(page, env.base, { stopAfterCases: 0, finish: false });
   const keys = await page.$$eval(".decision", e => e.map(x => x.dataset.k));
-  for (const k of keys.slice(0, 4)) await page.click(`input[name="a-${k}"][value=own]`);
+  for (const k of keys.slice(0, 3)) await page.click(`input[name="a-${k}"][value=own]`);
   await page.click("#next");
   assert.match(await page.textContent("#e"), /Choose an action for/);
-  assert.deepEqual(await page.$$eval(".decision.missing", e => e.map(x => x.dataset.k)), [keys[4]]);
+  assert.deepEqual(await page.$$eval(".decision.missing", e => e.map(x => x.dataset.k)), [keys[3]]);
   assert.equal(await page.evaluate(() => Object.values(ST.cases)[0].errA), 1);
-  await page.click(`input[name="a-${keys[4]}"][value=hold]`);
+  await page.click(`input[name="a-${keys[3]}"][value=hold]`);
   await page.click("#next");
   await page.waitForSelector(".compare");
 });
@@ -120,7 +150,7 @@ test("confidence and reason are optional", async () => {
 test("a failed final save shows Try again, and the retry reaches the server", async () => {
   const page = await env.newPage();
   const { record: partial } = await playSurvey(page, env.base, { finish: false });
-  for (const id of ["e1", "e2", "f1", "f2", "f5"]) await page.selectOption("#" + id, { index: 1 });
+  await aboutYou(page);
   env.api.failPosts = 3;
   await page.click("#next");
   await page.waitForSelector("h1:text('Thank you')");
@@ -140,7 +170,7 @@ test("a failed final save shows Try again, and the retry reaches the server", as
 test("a finished but unsaved response retries by itself when the page is reopened", async () => {
   const page = await env.newPage();
   const { record: partial } = await playSurvey(page, env.base, { finish: false });
-  for (const id of ["e1", "e2", "f1", "f2", "f5"]) await page.selectOption("#" + id, { index: 1 });
+  await aboutYou(page);
   env.api.failPosts = 3;
   await page.click("#next");
   await page.waitForSelector("#retry");
@@ -156,9 +186,9 @@ test("reload mid-survey asks to resume, keeps the same PID, and returns to the s
   const { record } = await playSurvey(page, env.base, { stopAfterCases: 2, finish: false });
   await page.reload();
   await page.waitForSelector("#cont");
-  assert.match(await page.textContent("#app"), /2 of 6 situations completed/);
+  assert.match(await page.textContent("#app"), /2 of 5 situations completed/);
   await page.click("#cont");
-  await page.waitForSelector("text=Situation 3 of 6");
+  await page.waitForSelector("text=Situation 3 of 5");
   assert.equal(await page.evaluate(() => ST.pid), record.pid);
   assert.equal(env.fn.stored(record.pid).status, "in_progress");
 });
@@ -192,16 +222,17 @@ test("an unfinished response from the earlier survey is kept and a fresh one sta
   assert.deepEqual(srv.cases, old.cases, "old answers sent unchanged");
 });
 
-test("how it works shows who decides and when, and the Own-versus-Delegate example", async () => {
+test("how it works comes right after the welcome: short instructions, who decides and when, no example", async () => {
   const page = await env.newPage();
   await page.goto(env.base + "/?new=1");
   await page.click("#begin");
-  for (let i = 1; i <= 5; i++) await page.selectOption("#q" + i, { index: 1 });
-  await page.click("#next");
+  await page.waitForSelector(".whowhen");
+  assert.match(await page.textContent("h2"), /How it works/);
   const rows = await page.$$eval(".whowhen tbody tr", t => t.map(r => [...r.children].map(c => c.textContent)));
   assert.deepEqual(rows, [["Own", "You", "Now"], ["Delegate", "A team member, not you", "Now"],
     ["Wait", "You", "Later. Nothing is missing"], ["Hold", "No one yet", "Once something missing is in place"]]);
-  assert.match(await page.textContent(".example"), /refund/);
+  assert.equal(await page.$(".example"), null);
+  assert.doesNotMatch(await page.textContent("#app"), /refund/);
 });
 
 test("each caselet shows its key numbers and, under every decision, what is to be decided", async () => {

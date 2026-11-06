@@ -8,7 +8,7 @@ box.window = box; vm.createContext(box);
 ["js/config.js","js/cases.js","js/key.js","js/order.js","js/scoring.js"].forEach(f =>
   vm.runInContext(fs.readFileSync(f,"utf8"), box, {filename:f}));
 const run = s => vm.runInContext(s, box);
-const {CASES, KEY, ACTIONS, INSTRUCTIONS, PRACTICE, CONFIG, OWN_VS_DELEGATE} = box;
+const {CASES, KEY, ACTIONS, INSTRUCTIONS, CONFIG} = box;
 const LEVELS = run("AI_LEVELS"), LEVEL_NAME = {high:"High", moderate:"Moderate", low:"Low", very_low:"Very low"};
 const label = a => (ACTIONS.find(x => x[0] === a) || [a, a])[1];
 const meta = run("instrumentMeta()");
@@ -23,24 +23,22 @@ L.push("The text follows the 8 October 2026 manual, with the pilot feedback of 2
 L.push("- Every decision states what is to be decided (\"To decide:\" below each decision).");
 L.push("- Each caselet shows its key numbers as tiles above the opening. They restate the opening; nothing new.");
 L.push("- Launch Morning / Opening readiness: \"the advertised class schedule\" now reads \"the group exercise classes advertised for this afternoon\".");
-L.push("- Every AI reason for a non-preferred action is specific to its decision. The manual used four generic sentences there, which gave weak advice away. The actions recommended at each level, and the key, are unchanged.");
-L.push("- The instructions add a who-decides / when grid and an Own-versus-Delegate example. The four actions share one neutral style; no action has a colour.\n");
+L.push("- Every AI reason for a non-preferred action is specific to its decision. The manual used four generic sentences there, which gave weak advice away. The key is unchanged.");
+L.push("- The instructions add a who-decides / when grid. The four actions share one neutral style; no action has a colour.");
+L.push("- November 2026: five caselets with four decisions each. Day Before Travel is dropped, with one decision from each other caselet (Monday Project Team / Client escalation, Strong Employee / Employee development, Fest Week / Event staffing, Friday Support Team / Weekend service allocation, Launch Morning / Team responsibilities).");
+L.push("- November 2026: some AI actions were moved so that every caselet scores the same at each advice level (high, moderate, low and very low advice are one, two, three and four decisions away from the preferred action). Moved actions reuse the reason written for that action at another level; Monday Project Team / Revised recommendation at very low has a new reason.");
+L.push("- November 2026: no practice questions and no Own-versus-Delegate example; shorter instructions and welcome text; About you and the prize draw are on the last page; the pilot feedback and last-few-questions blocks are gone.\n");
 
 L.push("## Instructions respondents read\n");
 L.push(INSTRUCTIONS + "\n");
 L.push("| Action | Who decides? | When? |");
 L.push("| --- | --- | --- |");
 ACTIONS.forEach(([, n,,, who, when]) => L.push(`| ${n} | ${who} | ${when} |`));
-L.push("\n" + OWN_VS_DELEGATE + "\n");
+L.push("");
 L.push("| Action | Shown on each option | Definition |");
 L.push("| --- | --- | --- |");
 ACTIONS.forEach(([, n, gloss, def]) => L.push(`| ${n} | ${gloss} | ${def} |`));
 L.push("");
-
-L.push("## Practice questions and attention check (Wait versus Hold, not scored)\n");
-L.push("Both answered as expected counts as passing the attention check; the results view can leave out those who fail.\n");
-PRACTICE.items.forEach(i => L.push(`- **${i.n}** (expected: ${label(i.answer)}). ${i.t} To decide: ${i.q}`));
-L.push(`\nFeedback shown after answering: ${PRACTICE.feedback}\n`);
 
 L.push("## Order and AI advice assignment\n");
 L.push(`Caselet order is ${CONFIG.randomiseCaseOrder ? "randomised per respondent" : "fixed"}. Decision order inside a caselet is ${CONFIG.randomiseDecisionOrder ? "randomised per respondent" : "fixed, as numbered below"}. Both orders are stored on every response.\n`);
@@ -52,7 +50,7 @@ CASES.forEach(c => L.push(`| ${c.name} | ` + assign.map(a => LEVEL_NAME[a[c.id]]
 L.push("");
 
 L.push("## Scoring\n");
-L.push("Every decision scores all four actions from 0 to 20; each decision has exactly one 20, its preferred action. A caselet score is the sum of its five decision scores, 0 to 100, for the first answers, the final answers and the AI advice alike.\n");
+L.push(`Every decision scores all four actions from 0 to 20; each decision has exactly one 20, its preferred action. A caselet score is the sum of its ${run("DECISIONS_PER_CASE")} decision scores, rescaled to 0 to 100 (sum × 100 / ${20 * run("DECISIONS_PER_CASE")}), for the first answers, the final answers and the AI advice alike.\n`);
 L.push("| Caselet | " + LEVELS.map(l => LEVEL_NAME[l] + " advice").join(" | ") + " |");
 L.push("| --- |" + " --- |".repeat(LEVELS.length));
 CASES.forEach(c => L.push(`| ${c.name} | ` + LEVELS.map(l => run(`aiPlanScore(caseById(${c.id}), "${l}")`)).join(" | ") + " |"));
@@ -72,7 +70,7 @@ CASES.forEach(c => {
   L.push("\n**AI advice**\n");
   LEVELS.forEach(l => {
     const s = run(`scorePlan(${c.id}, aiPlan(caseById(${c.id}), "${l}").actions)`);
-    L.push(`*${LEVEL_NAME[l]}: ${s.total}/100, ${s.matches} of 5 preferred*\n`);
+    L.push(`*${LEVEL_NAME[l]}: ${s.total}/100, ${s.matches} of ${c.decisions.length} preferred*\n`);
     c.decisions.forEach((d, i) => L.push(`${i+1}. ${d.n}: **${label(c.ai[l][d.k][0])}**. ${c.ai[l][d.k][1]}`));
     L.push("");
   });
@@ -84,6 +82,7 @@ CASES.forEach(c => {
 const server = {
   INSTRUMENT_VERSION: meta.instrumentVersion, SCORING_VERSION: meta.scoringVersion,
   RECORD_SCHEMA: run("RECORD_SCHEMA"), KEY_HASH: meta.keyHash, CASES_HASH: meta.casesHash,
+  DECISION_MAX: run("DECISION_MAX"),
   CASE_IDS: CASES.map(c => c.id),
   CASE_DECISIONS: Object.fromEntries(CASES.map(c => [c.id, c.decisions.map(d => d.k)])),
   KEY

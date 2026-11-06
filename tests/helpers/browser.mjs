@@ -88,24 +88,20 @@ export async function setup(){
     async close(){ await browser.close(); server.close(); } };
 }
 
-/* Plays one full response. first: the action given to every decision
+/* Plays one full response: welcome, how it works, the caselets, then
+   About you on the last page. first: the action given to every decision
    first time ("own" by default; "cycle" rotates through the four).
    finals: per caselet, "keep" (leave the first answers) or "ai" (switch
    every decision to the AI's action). Records, per caselet, the
    decision titles each screen showed and the advice it showed. */
-export async function playSurvey(page, base, { first = "cycle", finals, finish = true, stopAfterCases = 6,
-                                               query = "?new=1", practice = ["wait", "hold"], conf = 3 } = {}){
-  finals = finals || ["keep", "ai", "keep", "ai", "keep", "ai"];
+export const N_CASES = 5;
+export async function playSurvey(page, base, { first = "cycle", finals, finish = true, stopAfterCases = N_CASES,
+                                               query = "?new=1", conf = 3 } = {}){
+  finals = finals || ["keep", "ai", "keep", "ai", "keep"];
   const ACTS = ["own", "delegate", "wait", "hold"];
   await page.goto(base + "/" + query);
-  await page.click("#begin");
-  for(let i = 1; i <= 5; i++) await page.selectOption("#q" + i, { index: 1 });
-  await page.click("#next");                                   // About you
+  await page.click("#begin");                                  // Welcome
   await page.click("#next");                                   // How it works
-  await page.click(`input[name=p-a][value=${practice[0]}]`);
-  await page.click(`input[name=p-b][value=${practice[1]}]`);
-  await page.click("#next");                                   // check
-  await page.click("#next");                                   // continue
   const seen = [];
   for(let n = 0; n < stopAfterCases; n++){
     await page.waitForSelector(".sit h2");
@@ -132,13 +128,18 @@ export async function playSurvey(page, base, { first = "cycle", finals, finish =
     await page.click("#next");                                 // save final answers
     seen.push(s);
   }
-  if(finish && stopAfterCases === 6){
-    for(const id of ["e1", "e2", "f1", "f2", "f5"]) await page.selectOption("#" + id, { index: 1 });
+  if(finish && stopAfterCases === N_CASES){
+    await aboutYou(page);
     await page.click("#next");
     await page.waitForSelector("h1:text('Thank you')");
-  } else if(stopAfterCases === 6){
-    await page.waitForSelector("#e1");
+  } else if(stopAfterCases === N_CASES){
+    await page.waitForSelector("#q1");
   }
   const record = await page.evaluate(() => JSON.parse(localStorage.getItem("inbasket_pilot_v2")));
   return { seen, record };
+}
+
+/* the last page: the five About you questions, first option each */
+export async function aboutYou(page){
+  for(let i = 1; i <= 5; i++) await page.selectOption("#q" + i, { index: 1 });
 }

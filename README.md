@@ -1,8 +1,8 @@
 # Managerial Decision Survey
 
-Six managerial situations ("caselets"), each with five decisions. For every
+Five managerial situations ("caselets"), each with four decisions. For every
 decision the respondent picks one of four actions: Own, Delegate, Wait or
-Hold. They then see an AI advisor's recommendation for the same five
+Hold. They then see an AI advisor's recommendation for the same four
 decisions and give final answers. The advice comes at four quality levels,
 so the study can ask whether ability shows up in how people use AI advice.
 
@@ -14,9 +14,15 @@ pilot, and the manual says not to pool the two without a bridging analysis.
 Pilot feedback of 22 October 2026 is applied on top of the manual: each
 decision says what is to be decided, each caselet shows its key numbers
 as tiles, "class schedule" is reworded, weak AI advice now gives reasons
-as specific as good advice, the instructions add a who-decides / when grid
-with an Own-versus-Delegate example, and the actions carry no colours.
-`docs/instrument.md` lists every change.
+as specific as good advice, the instructions add a who-decides / when grid,
+and the actions carry no colours.
+
+November 2026: five caselets with four decisions each (Day Before Travel
+and one duplicate decision per caselet dropped); every caselet scores the
+same at each advice level; shorter welcome and instructions; no practice
+questions; About you and the prize draw on the last page; the pilot
+feedback and last-few-questions blocks removed. `docs/instrument.md` lists
+every change.
 
 Plain HTML, CSS and JavaScript. No build step, no framework.
 
@@ -27,7 +33,7 @@ Plain HTML, CSS and JavaScript. No build step, no framework.
 | File | What it holds |
 | --- | --- |
 | `js/config.js` | The knobs: AI conditions, randomisation, contact details, instrument version. Start here. |
-| `js/cases.js` | Everything respondents read: instructions, the four actions, the practice item, caselets, decisions, AI advice at four levels. |
+| `js/cases.js` | Everything respondents read: instructions, the four actions, caselets, decisions, AI advice at four levels. |
 | `js/art.js` | One small illustration per caselet, for its header. |
 | `js/key.js` | The scoring key: 0 to 20 for each action on each decision. Not shown to anyone. |
 | `js/order.js` | Constrained randomisation: shuffles caselets (and decisions, if switched on), keeps declared `after` constraints, and validates them. |
@@ -201,14 +207,12 @@ in the outcome you are measuring.
 
 ## The design
 
-**Flow.** Welcome and consent, About you, how it works (the manual's
-instructions, a who-decides / when grid, an Own-versus-Delegate example and
-the four definitions), two practice questions on Wait versus Hold (not
-scored; both right is the attention check), then
-for each caselet: the context and five first answers; then the AI advice
-under each decision, the five final answers (the first answers start
-selected) and an optional confidence rating and reason. Last questions and
-the debrief close it.
+**Flow.** Welcome and consent, how it works (short instructions, a
+who-decides / when grid and the four definitions), then for each caselet:
+the context and four first answers; then the AI advice under each
+decision, the four final answers (the first answers start selected) and an
+optional confidence rating and reason. The last page asks About you (five
+questions) and the optional prize-draw details; the debrief closes it.
 
 **Order.** Caselet order is randomised per respondent. Decisions inside a
 caselet keep the manual's numbering (`randomiseDecisionOrder: false`). Both
@@ -220,20 +224,23 @@ that name something missing or form a loop.
 **AI advice.** Each respondent gets one of four conditions at random. The
 condition rotates the levels across the caselets: caselet *i* in `cases.js`
 order gets level (*i* + condition) mod 4. So every respondent sees all four
-levels (two of them twice) and, across the four conditions, every caselet
+levels (one of them twice) and, across the four conditions, every caselet
 appears at every level once. The level, the advice shown and its score are
 stored with each caselet's answers. Levels and scores are never shown.
 
+Every caselet scores the same at each level:
+
 | Level | Advice score | Preferred actions |
 | --- | --- | --- |
-| High | 94 | 4 of 5 |
-| Moderate | 74 | 3 of 5 |
-| Low | 48 | 2 of 5 |
-| Very low | 22 | 0 of 5 |
+| High | 92.5 | 3 of 4 |
+| Moderate | 67.5 | 2 of 4 |
+| Low | 35 | 1 of 4 |
+| Very low | 27.5 | 0 of 4 |
 
 **Scoring.** Each action on each decision scores 0 to 20; the preferred
-action scores 20. A caselet score is the sum of its five decisions, 0 to
-100, for first answers, final answers and advice alike. AI gain is final
+action scores 20. A caselet score is the sum of its four decisions,
+rescaled to 0 to 100 (sum × 100 / 80), for first answers, final answers and
+advice alike. AI gain is final
 minus first. The ability score is the mean first-answer caselet score; the
 CSV also carries the leave-one-caselet-out version.
 
@@ -241,11 +248,6 @@ CSV also carries the leave-one-caselet-out version.
 level and its score. The four actions share one neutral style, so no colour
 suggests an answer. The caselet illustration belongs to the caselet and
 says nothing about any decision.
-
-**Attention check.** The two practice questions each have one answer a
-careful reader cannot miss. The results view says who failed and has a box
-to leave them out of every statistic; the CSV keeps everyone, with an
-`attention_check_passed` column.
 
 ## Part 2: the Evaluator stage
 
@@ -298,7 +300,6 @@ Part 2 section and its own CSV (one row per rating) and raw JSON.
 | --- | --- | --- |
 | `EVALUATOR_ENABLED` | off | `1` turns Part 2 on |
 | `EVALUATOR_MIN_PRODUCER_MINUTES` | 5 | shortest Producer run that can be a target |
-| `EVALUATOR_REQUIRE_ATTENTION` | off | `1` leaves out targets who failed the attention check |
 | `EVALUATOR_INCLUDE_LEGACY_CONSENT` | off | `1` admits Producers who saw the older consent text, only with approval |
 | `EVALUATOR_MIN_TARGETS` | 3 | eligible records needed before Part 2 starts |
 
@@ -310,17 +311,17 @@ eligible count and why records were excluded.
 who finished Part 1. They go straight to Part 2. The server checks that the
 PID finished Part 1.
 
-**Consent.** New Producers now read: "Your decisions may later be shown to
-other participants in this study, who will be asked to rate them. They will
-never see your name, contact details or answers about yourself." Their
-records carry `consent.version: 2`. Records collected before this wording
+**Consent.** New Producers now read: "Your decisions may be shown
+anonymously to other participants in this study, who will rate them." Their
+records carry `consent.version: 3` (version 2 was the longer October
+wording). Records collected before this wording
 are not used unless you set `EVALUATOR_INCLUDE_LEGACY_CONSENT=1`. Do that
 only after your ethics approval covers it.
 
 ## Documentation
 
 `node make-docs.js` writes `docs/instrument.md` from `cases.js`, `key.js`
-and `scoring.js`: the instructions, the practice item, the condition table,
+and `scoring.js`: the instructions, the condition table,
 every caselet and decision as respondents read them, the key, and all four
 levels of advice with their scores. Regenerate it after any edit; a test
 fails if it is stale.
@@ -330,7 +331,7 @@ fails if it is stale.
 ## How responses are saved
 
 Every response is saved to the Netlify function (Netlify Blobs) as a full
-copy at these points: after About you, after each caselet's first answers
+copy at these points: at Start, after each caselet's first answers
 (before the AI advisor appears), after its final answers, and at Finish. One Blob per PID,
 so repeat saves never create duplicate respondents.
 

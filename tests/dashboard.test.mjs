@@ -11,15 +11,16 @@ const rows = recs => plain(site.run(`personRows(${J(recs)})`));
 
 test("only finished records of this instrument with every decision answered enter the statistics", () => {
   const recs = [
-    makeRecord(site, { pid: "done6" }),
-    makeRecord(site, { pid: "prog6", done: false }),
+    makeRecord(site, { pid: "done5" }),
+    makeRecord(site, { pid: "prog5", done: false }),
     makeRecord(site, { pid: "prog2", done: false, firsts: 3, finals: 2 }),
-    makeRecord(site, { pid: "bg", done: false, firsts: 0, finals: 0 }),
-    makeRecord(site, { pid: "short", firsts: 5, finals: 5 }),
-    makeRecord(site, { pid: "nofinal", finals: 5 }),
+    makeRecord(site, { pid: "start", done: false, firsts: 0, finals: 0 }),
+    makeRecord(site, { pid: "short", firsts: 4, finals: 4 }),
+    makeRecord(site, { pid: "nofinal", finals: 4 }),
+    makeRecord(site, { pid: "six", schema: 3 }),
     earlierPilotRecord("old")
   ];
-  assert.deepEqual(rows(recs).map(p => p.pid), ["done6"]);
+  assert.deepEqual(rows(recs).map(p => p.pid), ["done5"]);
 });
 
 test("a record missing one decision's final answer is not complete", () => {
@@ -31,13 +32,12 @@ test("a record missing one decision's final answer is not complete", () => {
 
 test("preferred answers everywhere score 100 per caselet; AI levels follow the condition", () => {
   const [p] = rows([makeRecord(site, { pid: "a", condition: 0 })]);
-  assert.equal(p.cases.length, 6);
-  assert.deepEqual(p.cases.map(c => c.first), [100, 100, 100, 100, 100, 100]);
-  assert.deepEqual(p.cases.map(c => c.final), [100, 100, 100, 100, 100, 100]);
+  assert.equal(p.cases.length, 5);
+  assert.deepEqual(p.cases.map(c => c.first), [100, 100, 100, 100, 100]);
+  assert.deepEqual(p.cases.map(c => c.final), [100, 100, 100, 100, 100]);
   assert.equal(p.mda, 100);
   assert.deepEqual(p.cases.map(c => [c.id, c.level, c.aiScore]),
-    [[3, "high", 94], [2, "moderate", 74], [5, "low", 48], [4, "very_low", 22], [1, "high", 94], [6, "moderate", 74]]);
-  assert.equal(p.practiceCorrect, true);
+    [[3, "high", 92.5], [2, "moderate", 67.5], [5, "low", 35], [4, "very_low", 27.5], [1, "high", 92.5]]);
   assert.equal(p.totalMin, 30);
 });
 
@@ -52,21 +52,21 @@ test("taking all the AI advice moves the final score to the advice score", () =>
       assert.equal(d.changed, d.first !== d.final);
     }
   }
-  /* every Own first answer: Monday scores 15+4+20+20+11 */
-  assert.equal(p.cases.find(c => c.id === 3).first, 70);
+  /* every Own first answer: Monday scores 4+20+20+11 out of 80 */
+  assert.equal(p.cases.find(c => c.id === 3).first, 68.75);
 });
 
 test("decision rows: one per person and decision, with the leave-one-out ability", () => {
   const per = plain(site.run(`personRows(${J([makeRecord(site, { pid: "a" }), makeRecord(site, { pid: "b", first: "wait" })])})`));
   const dr = plain(site.run(`decisionRows(${J(per)}).map(r => [r.p.pid, r.c.id, r.d.k, r.loo])`));
-  assert.equal(dr.length, 60);
+  assert.equal(dr.length, 40);
   assert.ok(dr.filter(r => r[0] === "a").every(r => r[3] === 100));
 });
 
 test("CSV: one row per person and decision, with the manual's fields", () => {
   const per = [makeRecord(site, { pid: "a" }), makeRecord(site, { pid: "b", condition: 3 })];
   const csv = plain(site.run(`toCSV(personRows(${J(per)}))`)).split("\n");
-  assert.equal(csv.length, 1 + 60);
+  assert.equal(csv.length, 1 + 40);
   const head = csv[0].split(",");
   for (const col of ["pid", "case_id", "decision_id", "first_action", "final_action", "ai_action", "ai_condition", "ai_level",
                      "ai_text", "decision_ms_first", "decision_ms_final", "confidence", "instrument_version", "recorded_key_hash"])
@@ -78,13 +78,14 @@ test("CSV: one row per person and decision, with the manual's fields", () => {
   const row = Object.fromEntries(head.map((h, i) => [h, parse(csv[1])[i]]));
   assert.equal(row.pid, "a");
   assert.equal(row.case_id, "3");
-  assert.equal(row.decision_id, "escalation");
-  assert.equal(row.first_action, "delegate");
+  assert.equal(row.decision_id, "expansion");
+  assert.equal(row.first_action, "hold");
   assert.equal(row.ai_level, "high");
-  assert.equal(row.ai_action, "delegate");
-  assert.match(row.ai_text, /^Lead has the most direct knowledge/);
+  assert.equal(row.ai_action, "hold");
+  assert.match(row.ai_text, /^A binding scope and timeline promise/);
   assert.equal(row.first_score, "20");
-  assert.equal(row.instrument_version, "survey-2026-10-round3");
+  assert.equal(row.instrument_version, "survey-2026-11-5x4");
+  assert.ok(!head.includes("attention_check_passed") && !head.includes("cat"), "no columns for removed questions");
 });
 
 test("CSV quotes values with commas, quotes and newlines", () => {

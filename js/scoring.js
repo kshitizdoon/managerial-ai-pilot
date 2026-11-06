@@ -4,7 +4,8 @@
    A plan is one action per decision:
      {escalation:"delegate", expansion:"hold", recommendation:"own", ...}
    A decision scores KEY[caseId][decision][action], 0 to 20.
-   A case score is the sum over its five decisions, 0 to 100.
+   A case score is the sum over its four decisions, rescaled to 0 to 100
+   (sum x 100 / 80), so it stays on the scale of earlier versions.
    The AI advice is a plan too, and is scored the same way.
    ============================================================= */
 
@@ -18,9 +19,13 @@ const AI_LEVELS = ["high", "moderate", "low", "very_low"];
    by themselves; SCORING_VERSION is the one to bump by hand when the
    rules in this file change. RECORD_SCHEMA is the shape of a saved
    response: records without a schemaVersion field are version 1, the
-   earlier pilot with quotas and named delegates is version 2. */
-const SCORING_VERSION = 2;
-const RECORD_SCHEMA = 3;
+   earlier pilot with quotas and named delegates is version 2, six
+   caselets with five decisions each (October 2026) is version 3, and
+   five caselets with four decisions each is version 4. */
+const SCORING_VERSION = 3;
+const RECORD_SCHEMA = 4;
+const DECISIONS_PER_CASE = 4;
+const DECISION_MAX = 20;
 
 /* JSON with sorted object keys, so the same content always hashes the same */
 function stableJSON(x){
@@ -45,7 +50,7 @@ function instrumentMeta(){
     scoringVersion: SCORING_VERSION,
     casesHash: fingerprint(CASES),
     keyHash: fingerprint(KEY),
-    scoringConfig: {decisionMax: 20, caseMax: 100},
+    scoringConfig: {decisionMax: DECISION_MAX, caseMax: 100, decisionsPerCase: DECISIONS_PER_CASE},
     caseIds: CASES.map(c => c.id),
     decisionIds: Object.fromEntries(CASES.map(c => [c.id, c.decisions.map(d => d.k)])),
     aiLevels: AI_LEVELS,
@@ -72,6 +77,8 @@ function preferredAction(caseId, k){
   const row = (KEY[caseId] || {})[k] || {};
   return ACTION_KEYS.reduce((best, a) => (row[a] ?? -1) > (row[best] ?? -1) ? a : best, ACTION_KEYS[0]);
 }
+/* the sum of decision scores on the 0-100 case scale */
+function toCaseScale(sum, n){ return Math.round(sum * 100 / (DECISION_MAX * n) * 100) / 100; }
 /* {total 0-100, parts {k: 0-20}, matches: how many preferred actions} */
 function scorePlan(caseId, plan){
   const c = caseById(caseId), parts = {};
@@ -82,7 +89,7 @@ function scorePlan(caseId, plan){
     total += parts[d.k];
     if(a && a === preferredAction(caseId, d.k)) matches++;
   });
-  return {total, parts, matches};
+  return {total: toCaseScale(total, c.decisions.length), parts, matches};
 }
 
 /* ---- AI advice -------------------------------------------------------- */
@@ -111,7 +118,7 @@ function checkKey(){
     const K = KEY[c.id];
     if(!K){ problems.push(`case ${c.id}: no key`); return; }
     const keys = c.decisions.map(d => d.k);
-    if(keys.length !== 5) problems.push(`case ${c.id}: ${keys.length} decisions, expected 5`);
+    if(keys.length !== DECISIONS_PER_CASE) problems.push(`case ${c.id}: ${keys.length} decisions, expected ${DECISIONS_PER_CASE}`);
     keys.forEach((k, i) => { if(keys.indexOf(k) !== i) problems.push(`case ${c.id}: decision id "${k}" is used twice`); });
     Object.keys(K).forEach(k => { if(!keys.includes(k)) problems.push(`case ${c.id}: key scores "${k}", which is not a decision`); });
     let ownPreferred = 0;
