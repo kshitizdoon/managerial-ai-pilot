@@ -2,7 +2,7 @@
 
 Generated from `js/cases.js`, `js/key.js` and `js/scoring.js`. Do not edit by hand; run `node make-docs.js`.
 
-Instrument version `survey-2026-11-5x4`, cases `89a568b4`, key `7733efcb`, scoring v3.
+Instrument version `survey-2026-11-5x4-r50`, cases `5e4897f8`, key `7733efcb`, scoring v3.
 
 ## Changes from the manual
 
@@ -16,6 +16,7 @@ The text follows the 8 October 2026 manual, with the pilot feedback of 22 Octobe
 - November 2026: five caselets with four decisions each. Day Before Travel is dropped, with one decision from each other caselet (Monday Project Team / Client escalation, Strong Employee / Employee development, Fest Week / Event staffing, Friday Support Team / Weekend service allocation, Launch Morning / Team responsibilities).
 - November 2026: some AI actions were moved so that every caselet scores the same at each advice level (high, moderate, low and very low advice are one, two, three and four decisions away from the preferred action). Moved actions reuse the reason written for that action at another level; Monday Project Team / Revised recommendation at very low has a new reason.
 - November 2026: no practice questions and no Own-versus-Delegate example; shorter instructions and welcome text; About you and the prize draw are on the last page; the pilot feedback and last-few-questions blocks are gone.
+- November 2026 (`survey-2026-11-5x4-r50`): the four advice levels are replaced by advice that is right or wrong decision by decision, drawn at random for each respondent (half right, half wrong). Each decision has one right advice and one or more wrong ones, taken from the earlier levels. Four decisions had no right advice at any level and now have one: Monday Project Team / Delivery recovery, Strong Employee / Client presentation, Friday Support Team / Client recovery plan, Launch Morning / Customer experience. Decision order inside each caselet is now shuffled. Strong Employee / Financial commitment is reworded in plainer language.
 
 ## Instructions respondents read
 
@@ -37,29 +38,13 @@ For each decision, choose who should make it and when. If you would make the dec
 
 ## Order and AI advice assignment
 
-Caselet order is randomised per respondent. Decision order inside a caselet is fixed, as numbered below. Both orders are stored on every response.
+Caselet order is randomised per respondent. Decision order inside a caselet is randomised per respondent. Both orders are stored on every response.
 
-Each respondent is given one of 4 AI conditions at random. The condition rotates the four advice levels across the caselets, so every respondent sees every level, and across the conditions every caselet appears at every level once. Levels and scores are never shown to respondents.
-
-| Caselet | Condition 0 | Condition 1 | Condition 2 | Condition 3 |
-| --- | --- | --- | --- | --- |
-| Monday Project Team | High | Moderate | Low | Very low |
-| Strong Employee | Moderate | Low | Very low | High |
-| Fest Week | Low | Very low | High | Moderate |
-| Friday Support Team | Very low | High | Moderate | Low |
-| Launch Morning | High | Moderate | Low | Very low |
+For each respondent the AI advice is right (the key's preferred action) on 50% of all decisions, chosen at random, and wrong on the rest. Wrong advice picks one of the decision's wrong options at random. Whether advice is right is never shown to respondents. The draw is stored with every response.
 
 ## Scoring
 
 Every decision scores all four actions from 0 to 20; each decision has exactly one 20, its preferred action. A caselet score is the sum of its 4 decision scores, rescaled to 0 to 100 (sum × 100 / 80), for the first answers, the final answers and the AI advice alike.
-
-| Caselet | High advice | Moderate advice | Low advice | Very low advice |
-| --- | --- | --- | --- | --- |
-| Monday Project Team | 92.5 | 67.5 | 35 | 27.5 |
-| Strong Employee | 92.5 | 67.5 | 35 | 27.5 |
-| Fest Week | 92.5 | 67.5 | 35 | 27.5 |
-| Friday Support Team | 92.5 | 67.5 | 35 | 27.5 |
-| Launch Morning | 92.5 | 67.5 | 35 | 27.5 |
 
 ## Monday Project Team (case 3)
 
@@ -85,33 +70,22 @@ You manage a 12-person consulting team handling several client assignments. Your
 
 **AI advice**
 
-*High: 92.5/100, 3 of 4 preferred*
-
-1. Project expansion: **Hold**. A binding scope and timeline promise depends on regulatory implications that have not been assessed. Deferring merely for convenience does not address that prerequisite.
-2. Revised recommendation: **Own**. The manager personally agreed the assumptions now being revised, making ownership of the final recommendation more valuable than merely checking the calculations.
-3. Delivery recovery: **Delegate**. Both project leads know their projects and milestones best. They can agree the reallocation between themselves, which keeps the manager's limited time for client-facing matters today.
-4. Performance discussion: **Wait**. The career discussion matters, but the next review is later this month and immediate client demands have earlier deadlines.
-
-*Moderate: 67.5/100, 2 of 4 preferred*
-
-1. Project expansion: **Wait**. The client wants a commitment by tomorrow, not today. The manager can give the expansion proper attention tomorrow morning, once today's more pressing client matters are dealt with.
-2. Revised recommendation: **Own**. The manager personally agreed the assumptions now being revised, making ownership of the final recommendation more valuable than merely checking the calculations.
-3. Delivery recovery: **Hold**. The second lead is concerned about upcoming milestones. The effect of losing two consultants on that project should be assessed before anyone commits to the reallocation.
-4. Performance discussion: **Wait**. The career discussion matters, but the next review is later this month and immediate client demands have earlier deadlines.
-
-*Low: 35/100, 1 of 4 preferred*
-
-1. Project expansion: **Own**. A long-standing client is asking to grow the engagement, and the team has delivered similar work before. A firm commitment from the manager secures the opportunity and reassures the client.
-2. Revised recommendation: **Own**. The manager personally agreed the assumptions now being revised, making ownership of the final recommendation more valuable than merely checking the calculations.
-3. Delivery recovery: **Hold**. The second lead is concerned about upcoming milestones. The effect of losing two consultants on that project should be assessed before anyone commits to the reallocation.
-4. Performance discussion: **Hold**. Readiness should be judged against evidence from the employee's recent additional responsibilities. Gathering that input from others before the conversation would make the discussion fairer.
-
-*Very low: 27.5/100, 0 of 4 preferred*
-
-1. Project expansion: **Own**. A long-standing client is asking to grow the engagement, and the team has delivered similar work before. A firm commitment from the manager secures the opportunity and reassures the client.
-2. Revised recommendation: **Delegate**. The project lead built the updated numbers and knows the revised assumptions in detail. The lead can finalise the recommendation and send it by 1:00 PM.
-3. Delivery recovery: **Hold**. The second lead is concerned about upcoming milestones. The effect of losing two consultants on that project should be assessed before anyone commits to the reallocation.
-4. Performance discussion: **Hold**. Readiness should be judged against evidence from the employee's recent additional responsibilities. Gathering that input from others before the conversation would make the discussion fairer.
+1. **Project expansion**
+   - Right: **Hold**. A binding scope and timeline promise depends on regulatory implications that have not been assessed. Deferring merely for convenience does not address that prerequisite.
+   - Wrong: **Wait** (scores 10). The client wants a commitment by tomorrow, not today. The manager can give the expansion proper attention tomorrow morning, once today's more pressing client matters are dealt with.
+   - Wrong: **Own** (scores 4). A long-standing client is asking to grow the engagement, and the team has delivered similar work before. A firm commitment from the manager secures the opportunity and reassures the client.
+2. **Revised recommendation**
+   - Right: **Own**. The manager personally agreed the assumptions now being revised, making ownership of the final recommendation more valuable than merely checking the calculations.
+   - Wrong: **Delegate** (scores 14). The project lead built the updated numbers and knows the revised assumptions in detail. The lead can finalise the recommendation and send it by 1:00 PM.
+   - Wrong: **Hold** (scores 3). The revised numbers change assumptions agreed last year. The updated figures should be independently verified before anything goes to the client, so the recommendation does not need correcting later.
+3. **Delivery recovery**
+   - Right: **Own**. Moving two consultants affects two projects and two clients, and the second lead has concerns about milestones. The manager should decide the reallocation today so both clients get updates.
+   - Wrong: **Delegate** (scores 14). Both project leads know their projects and milestones best. They can agree the reallocation between themselves, which keeps the manager's limited time for client-facing matters today.
+   - Wrong: **Hold** (scores 4). The second lead is concerned about upcoming milestones. The effect of losing two consultants on that project should be assessed before anyone commits to the reallocation.
+   - Wrong: **Wait** (scores 0). Both clients expect updates today, but the staffing change itself need not be settled this morning. It can be decided once today's client responses have gone out.
+4. **Performance discussion**
+   - Right: **Wait**. The career discussion matters, but the next review is later this month and immediate client demands have earlier deadlines.
+   - Wrong: **Hold** (scores 0). Readiness should be judged against evidence from the employee's recent additional responsibilities. Gathering that input from others before the conversation would make the discussion fairer.
 
 ## Strong Employee (case 2)
 
@@ -122,7 +96,7 @@ You manage a 12-person consulting team handling several client assignments. Your
 You manage an eight-person analytics team preparing a major client presentation for tomorrow. Two senior analysts can independently lead assignments, although you remain accountable for client commitments. You have approximately three hours available today for direct involvement in the matters below.
 
 1. **Client presentation** (`presentation`). A client has questioned a recommendation that could affect its annual operating budget. The senior analyst who developed the analysis believes the recommendation is sound, but the client has challenged the team's commercial assumptions in earlier discussions. The client expects your team's position by 2:00 PM. *To decide:* the team's position on the challenged recommendation, due by 2:00 PM.
-2. **Financial commitment** (`funding`). Finance has asked you to approve ₹4 lakh for additional analytical support before today’s vendor deadline. The support could strengthen tomorrow’s client presentation. The team can begin some work using existing data, but completing the proposed analysis depends on client information expected later today. The vendor requires a commitment for the full amount. *To decide:* whether to approve the ₹4 lakh vendor commitment today.
+2. **Financial commitment** (`funding`). Finance needs your approval today to pay a vendor ₹4 lakh for extra analysis for tomorrow’s client presentation. The vendor wants a commitment for the full amount before its deadline today. Your team can start part of the work with data it already has. The rest needs information from the client, expected later today. *To decide:* whether to approve the ₹4 lakh vendor commitment today.
 3. **Partner request** (`partner`). A partner has requested an initial assessment of an opportunity with an existing client by tomorrow morning. The opportunity builds on the team's current work but could involve a different commercial model. A senior analyst has worked closely with the client, while you have participated in earlier discussions about the account. *To decide:* the initial assessment of the opportunity, due to the partner tomorrow morning.
 4. **Performance review** (`review`). A senior analyst has challenged feedback in their year-end evaluation, arguing that it overlooks their contribution to a difficult project. You have reviewed the evidence and formed an assessment. The analyst has requested a discussion this week, while the formal evaluation meeting is scheduled for Thursday. *To decide:* how to respond to the analyst's challenge to their evaluation.
 
@@ -137,33 +111,22 @@ You manage an eight-person analytics team preparing a major client presentation 
 
 **AI advice**
 
-*High: 92.5/100, 3 of 4 preferred*
-
-1. Client presentation: **Delegate**. The senior analyst built the analysis and knows the assumptions in detail. They are best placed to defend the recommendation and can set the team's position before the 2:00 PM deadline.
-2. Financial commitment: **Hold**. The vendor requires full expenditure although the information needed to complete the work may not arrive. Commitment should depend on confirming usable inputs.
-3. Partner request: **Delegate**. This is an initial assessment rather than a binding offer. A senior analyst with client experience can own it, despite the manager’s commercial familiarity.
-4. Performance review: **Wait**. The manager has already formed an assessment and a formal discussion is scheduled for Thursday, so a personal discussion can be deferred.
-
-*Moderate: 67.5/100, 2 of 4 preferred*
-
-1. Client presentation: **Delegate**. The senior analyst built the analysis and knows the assumptions in detail. They are best placed to defend the recommendation and can set the team's position before the 2:00 PM deadline.
-2. Financial commitment: **Hold**. The vendor requires full expenditure although the information needed to complete the work may not arrive. Commitment should depend on confirming usable inputs.
-3. Partner request: **Delegate**. This is an initial assessment rather than a binding offer. A senior analyst with client experience can own it, despite the manager’s commercial familiarity.
-4. Performance review: **Hold**. The analyst says the feedback overlooks their part in a difficult project. Input from colleagues on that project should be collected before the feedback is discussed again.
-
-*Low: 35/100, 1 of 4 preferred*
-
-1. Client presentation: **Hold**. The client has challenged the commercial assumptions before. The team's position should not be confirmed until those assumptions have been re-tested against the client's latest objections.
-2. Financial commitment: **Own**. The extra analysis could strengthen tomorrow's presentation, and the vendor deadline is today. Approving the full amount now secures the support while the team starts with existing data.
-3. Partner request: **Delegate**. This is an initial assessment rather than a binding offer. A senior analyst with client experience can own it, despite the manager’s commercial familiarity.
-4. Performance review: **Hold**. The analyst says the feedback overlooks their part in a difficult project. Input from colleagues on that project should be collected before the feedback is discussed again.
-
-*Very low: 27.5/100, 0 of 4 preferred*
-
-1. Client presentation: **Wait**. The position is not due until 2:00 PM. The manager can settle it early in the afternoon, after dealing with the vendor deadline and the partner's request.
-2. Financial commitment: **Wait**. The client information is expected later today. The manager can return to the approval this evening, once the more urgent presentation matters have been handled.
-3. Partner request: **Hold**. The opportunity could involve a different commercial model. The assessment should not go to the partner until the pricing implications of that model have been worked out.
-4. Performance review: **Own**. The analyst has challenged the evaluation directly and asked to meet this week. Meeting them personally now keeps the disagreement from growing before Thursday's formal meeting.
+1. **Client presentation**
+   - Right: **Own**. The client has challenged the team’s commercial assumptions on a recommendation that affects its annual budget. The manager should set the team’s position before 2:00 PM, using the analyst’s work.
+   - Wrong: **Delegate** (scores 14). The senior analyst built the analysis and knows the assumptions in detail. They are best placed to defend the recommendation and can set the team's position before the 2:00 PM deadline.
+   - Wrong: **Hold** (scores 4). The client has challenged the commercial assumptions before. The team's position should not be confirmed until those assumptions have been re-tested against the client's latest objections.
+   - Wrong: **Wait** (scores 0). The position is not due until 2:00 PM. The manager can settle it early in the afternoon, after dealing with the vendor deadline and the partner's request.
+2. **Financial commitment**
+   - Right: **Hold**. The vendor requires full expenditure although the information needed to complete the work may not arrive. Commitment should depend on confirming usable inputs.
+   - Wrong: **Own** (scores 4). The extra analysis could strengthen tomorrow's presentation, and the vendor deadline is today. Approving the full amount now secures the support while the team starts with existing data.
+   - Wrong: **Wait** (scores 11). The client information is expected later today. The manager can return to the approval this evening, once the more urgent presentation matters have been handled.
+3. **Partner request**
+   - Right: **Delegate**. This is an initial assessment rather than a binding offer. A senior analyst with client experience can own it, despite the manager’s commercial familiarity.
+   - Wrong: **Hold** (scores 0). The opportunity could involve a different commercial model. The assessment should not go to the partner until the pricing implications of that model have been worked out.
+4. **Performance review**
+   - Right: **Wait**. The manager has already formed an assessment and a formal discussion is scheduled for Thursday, so a personal discussion can be deferred.
+   - Wrong: **Hold** (scores 0). The analyst says the feedback overlooks their part in a difficult project. Input from colleagues on that project should be collected before the feedback is discussed again.
+   - Wrong: **Own** (scores 11). The analyst has challenged the evaluation directly and asked to meet this week. Meeting them personally now keeps the disagreement from growing before Thursday's formal meeting.
 
 ## Fest Week (case 5)
 
@@ -189,33 +152,20 @@ You head your institute's festival committee. The festival opens in three weeks,
 
 **AI advice**
 
-*High: 92.5/100, 3 of 4 preferred*
-
-1. Registration strategy: **Own**. The decision uses most remaining publicity funds under uncertain causes of low registrations, requiring a committee-wide resource judgment.
-2. Sponsor negotiation: **Own**. The largest sponsor's contribution and next year's agreement are both at stake. The head should negotiate the branding offer personally and settle the terms with the sponsor today.
-3. Venue commitment: **Hold**. A non-refundable commitment to a substantially larger event should await confirmation that the proposed crowd arrangements fit that venue.
-4. Festival programming: **Wait**. The programme discussion is valuable but can be resolved before the later-week schedule deadline after urgent sponsorship and registration choices.
-
-*Moderate: 67.5/100, 2 of 4 preferred*
-
-1. Registration strategy: **Own**. The decision uses most remaining publicity funds under uncertain causes of low registrations, requiring a committee-wide resource judgment.
-2. Sponsor negotiation: **Own**. The largest sponsor's contribution and next year's agreement are both at stake. The head should negotiate the branding offer personally and settle the terms with the sponsor today.
-3. Venue commitment: **Hold**. A non-refundable commitment to a substantially larger event should await confirmation that the proposed crowd arrangements fit that venue.
-4. Festival programming: **Hold**. The proposed format may overlap with an existing event. The session should not be confirmed until the overlap in audience and timing with that event has been checked.
-
-*Low: 35/100, 1 of 4 preferred*
-
-1. Registration strategy: **Hold**. The cause of the 22% drop is unclear: the rival festival and the coordinator's exit may both matter. Committing most of the budget should wait until the cause is better understood.
-2. Sponsor negotiation: **Hold**. The reduction rests on expected footfall, which registrations will show when they close next week, and the terms also cover next year’s festival. Final terms can be agreed before the festival opens, so committing before footfall is known would be premature.
-3. Venue commitment: **Own**. The discounted rate ends this evening and the new event has attracted strong interest. The head should approve the deposit and secure the larger venue before the offer lapses.
-4. Festival programming: **Hold**. The proposed format may overlap with an existing event. The session should not be confirmed until the overlap in audience and timing with that event has been checked.
-
-*Very low: 27.5/100, 0 of 4 preferred*
-
-1. Registration strategy: **Hold**. The cause of the 22% drop is unclear: the rival festival and the coordinator's exit may both matter. Committing most of the budget should wait until the cause is better understood.
-2. Sponsor negotiation: **Own**. The largest sponsor's contribution and next year's agreement are both at stake. The head should negotiate the branding offer personally and settle the terms with the sponsor today.
-3. Venue commitment: **Own**. The discounted rate ends this evening and the new event has attracted strong interest. The head should approve the deposit and secure the larger venue before the offer lapses.
-4. Festival programming: **Hold**. The proposed format may overlap with an existing event. The session should not be confirmed until the overlap in audience and timing with that event has been checked.
+1. **Registration strategy**
+   - Right: **Own**. The decision uses most remaining publicity funds under uncertain causes of low registrations, requiring a committee-wide resource judgment.
+   - Wrong: **Hold** (scores 4). The cause of the 22% drop is unclear: the rival festival and the coordinator's exit may both matter. Committing most of the budget should wait until the cause is better understood.
+2. **Sponsor negotiation**
+   - Right: **Hold**. The reduction rests on expected footfall, which registrations will show when they close next week, and the terms also cover next year’s festival. Final terms can be agreed before the festival opens, so committing before footfall is known would be premature.
+   - Wrong: **Own** (scores 14). The largest sponsor's contribution and next year's agreement are both at stake. The head should negotiate the branding offer personally and settle the terms with the sponsor today.
+   - Wrong: **Delegate** (scores 5). The sponsorship lead already has a proposal and knows the sponsor. The negotiation sits within their remit and agreed budget, which keeps the head free for other matters.
+3. **Venue commitment**
+   - Right: **Hold**. A non-refundable commitment to a substantially larger event should await confirmation that the proposed crowd arrangements fit that venue.
+   - Wrong: **Own** (scores 4). The discounted rate ends this evening and the new event has attracted strong interest. The head should approve the deposit and secure the larger venue before the offer lapses.
+4. **Festival programming**
+   - Right: **Wait**. The programme discussion is valuable but can be resolved before the later-week schedule deadline after urgent sponsorship and registration choices.
+   - Wrong: **Hold** (scores 0). The proposed format may overlap with an existing event. The session should not be confirmed until the overlap in audience and timing with that event has been checked.
+   - Wrong: **Delegate** (scores 5). The student team has been developing the programme and knows the schedule. They can decide how to fit in the alumni session before the schedule is finalised later this week.
 
 ## Friday Support Team (case 4)
 
@@ -241,33 +191,21 @@ You lead a 10-person customer support team serving several business clients. You
 
 **AI advice**
 
-*High: 92.5/100, 3 of 4 preferred*
-
-1. Customer escalation: **Own**. Repeated alleged failures for a major account raise service accountability and commercial relationship concerns beyond an ordinary ticket response.
-2. Service commitment: **Hold**. A firm guarantee is not supported when the present incident has persisted despite intervention, even if previous incidents resolved quickly.
-3. Process improvement: **Wait**. The process policy is important but implementation is next month. Immediate weekend decisions take priority.
-4. Client recovery plan: **Own**. The client's ratings have declined and a credible response is expected tonight. The manager should own the recovery plan to show the client senior attention.
-
-*Moderate: 67.5/100, 2 of 4 preferred*
-
-1. Customer escalation: **Own**. Repeated alleged failures for a major account raise service accountability and commercial relationship concerns beyond an ordinary ticket response.
-2. Service commitment: **Hold**. A firm guarantee is not supported when the present incident has persisted despite intervention, even if previous incidents resolved quickly.
-3. Process improvement: **Hold**. The change could increase handling time for complex cases. Its effect on those cases should be measured before deciding whether senior agents get more discretion.
-4. Client recovery plan: **Own**. The client's ratings have declined and a credible response is expected tonight. The manager should own the recovery plan to show the client senior attention.
-
-*Low: 35/100, 1 of 4 preferred*
-
-1. Customer escalation: **Hold**. The account lead blames unusual demand, while the client says commitments were missed. The ticket data should be reviewed to establish which account is right before the team responds.
-2. Service commitment: **Own**. A substantial contract renewal depends on this answer, and similar failures were fixed within a day before. The manager should give the client a firm commitment tonight.
-3. Process improvement: **Wait**. The process policy is important but implementation is next month. Immediate weekend decisions take priority.
-4. Client recovery plan: **Wait**. The plan uses existing staff and stays within agreed service levels, so nothing has to change before Monday. The manager can review it properly after the weekend.
-
-*Very low: 27.5/100, 0 of 4 preferred*
-
-1. Customer escalation: **Hold**. The account lead blames unusual demand, while the client says commitments were missed. The ticket data should be reviewed to establish which account is right before the team responds.
-2. Service commitment: **Own**. A substantial contract renewal depends on this answer, and similar failures were fixed within a day before. The manager should give the client a firm commitment tonight.
-3. Process improvement: **Hold**. The change could increase handling time for complex cases. Its effect on those cases should be measured before deciding whether senior agents get more discretion.
-4. Client recovery plan: **Own**. The client's ratings have declined and a credible response is expected tonight. The manager should own the recovery plan to show the client senior attention.
+1. **Customer escalation**
+   - Right: **Own**. Repeated alleged failures for a major account raise service accountability and commercial relationship concerns beyond an ordinary ticket response.
+   - Wrong: **Hold** (scores 4). The account lead blames unusual demand, while the client says commitments were missed. The ticket data should be reviewed to establish which account is right before the team responds.
+   - Wrong: **Wait** (scores 0). The client wants a response before the weekend, and there are still some hours left. It can be written after the weekend coverage is settled, when the evening is quieter.
+2. **Service commitment**
+   - Right: **Hold**. A firm guarantee is not supported when the present incident has persisted despite intervention, even if previous incidents resolved quickly.
+   - Wrong: **Own** (scores 4). A substantial contract renewal depends on this answer, and similar failures were fixed within a day before. The manager should give the client a firm commitment tonight.
+3. **Process improvement**
+   - Right: **Wait**. The process policy is important but implementation is next month. Immediate weekend decisions take priority.
+   - Wrong: **Hold** (scores 0). The change could increase handling time for complex cases. Its effect on those cases should be measured before deciding whether senior agents get more discretion.
+   - Wrong: **Delegate** (scores 5). The team lead designed the proposal and will carry it out next month. They are best placed to settle the details of the escalation process within the team's commitments.
+4. **Client recovery plan**
+   - Right: **Delegate**. The plan uses the account’s existing staff and stays within agreed service levels. The account lead knows the client and has a proposal ready, so the lead can finalise it tonight.
+   - Wrong: **Own** (scores 14). The client's ratings have declined and a credible response is expected tonight. The manager should own the recovery plan to show the client senior attention.
+   - Wrong: **Wait** (scores 0). The plan uses existing staff and stays within agreed service levels, so nothing has to change before Monday. The manager can review it properly after the weekend.
 
 ## Launch Morning (case 1)
 
@@ -293,30 +231,16 @@ You manage a chain of fitness centres and are opening a new branch at noon today
 
 **AI advice**
 
-*High: 92.5/100, 3 of 4 preferred*
-
-1. Corporate membership: **Own**. A price exception for 40 memberships could establish inconsistent treatment of early customers and needs manager-level commercial judgment.
-2. Opening announcement: **Delegate**. The communications lead can adapt an accurate announcement within approved marketing limits while the manager addresses higher-stakes decisions.
-3. Opening readiness: **Hold**. The revised exercise-area arrangement has not been tested under relevant crowd conditions. A firm opening commitment should await a sufficient readiness check.
-4. Customer experience: **Own**. Both groups matter: one brings loyal members, the other substantial new business. Choosing which group gets dedicated trainers is a judgement the manager should make personally today.
-
-*Moderate: 67.5/100, 2 of 4 preferred*
-
-1. Corporate membership: **Delegate**. The customer lead handles memberships and knows what early members paid. They can agree terms with the company within the opening plan while the manager prepares the launch.
-2. Opening announcement: **Delegate**. The communications lead can adapt an accurate announcement within approved marketing limits while the manager addresses higher-stakes decisions.
-3. Opening readiness: **Hold**. The revised exercise-area arrangement has not been tested under relevant crowd conditions. A firm opening commitment should await a sufficient readiness check.
-4. Customer experience: **Wait**. The second group can be fully supported from the following week. The allocation can be confirmed after the opening, once the manager has seen how busy the first days are.
-
-*Low: 35/100, 1 of 4 preferred*
-
-1. Corporate membership: **Own**. A price exception for 40 memberships could establish inconsistent treatment of early customers and needs manager-level commercial judgment.
-2. Opening announcement: **Hold**. A competitor has just announced a similar offer. The revised message should not go out until its likely effect on early membership sales has been checked.
-3. Opening readiness: **Own**. Staff have rearranged the equipment and expect fewer customers at first. The manager should confirm the noon opening so booked customers and classes go ahead as planned.
-4. Customer experience: **Wait**. The second group can be fully supported from the following week. The allocation can be confirmed after the opening, once the manager has seen how busy the first days are.
-
-*Very low: 27.5/100, 0 of 4 preferred*
-
-1. Corporate membership: **Delegate**. The customer lead handles memberships and knows what early members paid. They can agree terms with the company within the opening plan while the manager prepares the launch.
-2. Opening announcement: **Hold**. A competitor has just announced a similar offer. The revised message should not go out until its likely effect on early membership sales has been checked.
-3. Opening readiness: **Own**. Staff have rearranged the equipment and expect fewer customers at first. The manager should confirm the noon opening so booked customers and classes go ahead as planned.
-4. Customer experience: **Wait**. The second group can be fully supported from the following week. The allocation can be confirmed after the opening, once the manager has seen how busy the first days are.
+1. **Corporate membership**
+   - Right: **Own**. A price exception for 40 memberships could establish inconsistent treatment of early customers and needs manager-level commercial judgment.
+   - Wrong: **Delegate** (scores 14). The customer lead handles memberships and knows what early members paid. They can agree terms with the company within the opening plan while the manager prepares the launch.
+2. **Opening announcement**
+   - Right: **Delegate**. The communications lead can adapt an accurate announcement within approved marketing limits while the manager addresses higher-stakes decisions.
+   - Wrong: **Hold** (scores 4). A competitor has just announced a similar offer. The revised message should not go out until its likely effect on early membership sales has been checked.
+3. **Opening readiness**
+   - Right: **Hold**. The revised exercise-area arrangement has not been tested under relevant crowd conditions. A firm opening commitment should await a sufficient readiness check.
+   - Wrong: **Own** (scores 4). Staff have rearranged the equipment and expect fewer customers at first. The manager should confirm the noon opening so booked customers and classes go ahead as planned.
+4. **Customer experience**
+   - Right: **Delegate**. The customer experience lead knows both groups and has already proposed an arrangement. The second group can be supported from the following week, so the lead can confirm the plan today.
+   - Wrong: **Own** (scores 14). Both groups matter: one brings loyal members, the other substantial new business. Choosing which group gets dedicated trainers is a judgement the manager should make personally today.
+   - Wrong: **Wait** (scores 0). The second group can be fully supported from the following week. The allocation can be confirmed after the opening, once the manager has seen how busy the first days are.

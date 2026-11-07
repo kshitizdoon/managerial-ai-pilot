@@ -193,14 +193,13 @@ function welcome(){
 function beginResponse(){
   const url = new URLSearchParams(location.search);
   const order = caseOrder();
-  const forced = parseInt(url.get("ai"), 10);
-  const condition = forced >= 0 && forced < CONFIG.aiConditions ? forced : Math.floor(Math.random() * CONFIG.aiConditions);
+  const force = ["right", "wrong"].includes(url.get("ai")) ? url.get("ai") : null;
   ST = {
     pid: uid(),
-    /* treatment: set once here. aiLevels[caseId] is the quality level
-       of the advice that caselet shows this respondent. */
-    aiCondition: condition,
-    aiLevels: aiAssignment(condition),
+    /* treatment: drawn once here. advice[caseId] holds the AI action and
+       reason for each decision, and whether that advice is right. */
+    advice: drawAdvice(Math.random, force),
+    aiRightShare: force ? (force === "right" ? 1 : 0) : CONFIG.aiRightShare,
     started: new Date().toISOString(),
     bg: null,
     /* caseOrder holds case ids and is what the survey follows. order
@@ -420,12 +419,14 @@ function confidenceHTML(){
 function pageFinal(c, rec){
   setStep(`Situation ${ST.at+1} of ${CASES.length}`, progress(ST.at, 1));
   const list = ordered(c, rec);
-  const level = ST.aiLevels[c.id];
-  const ai = aiPlan(c, level);
+  /* a response started before the advice was drawn per decision */
+  if(!ST.advice){ ST.advice = drawAdvice(); ST.aiRightShare = CONFIG.aiRightShare; }
+  const ai = ST.advice[c.id];
   /* what the advisor showed, kept with the answers, so the record stands
      on its own if the advice is edited later. Set once. */
-  if(!rec.ai) rec.ai = {condition: ST.aiCondition, level, actions: ai.actions, why: ai.why,
-                        score: aiPlanScore(c, level)};
+  if(!rec.ai) rec.ai = {actions: ai.actions, why: ai.why, right: ai.right,
+                        rightCount: adviceRightCount(c.id, ai.actions),
+                        score: scorePlan(c.id, ai.actions).total};
   const shown = rec.ai;
   paint(`${situationHeader(c)}
    <h3 class="part">AI advice and your final answers</h3>

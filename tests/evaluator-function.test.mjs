@@ -30,7 +30,7 @@ async function setup(nProducers = 6, extra = {}){
   const evGet = (q) => call(f.evaluator.default, "http://site/api/evaluator" + q);
   const produce = (rec) => call(f.responses.default, "http://site/api/responses", rec);
   for (let i = 0; i < nProducers; i++)
-    await produce(makeRecord(site, { pid: "prod" + i, condition: i % 4, first: FIRSTS[i % 5], final: i % 2 ? "ai" : "first",
+    await produce(makeRecord(site, { pid: "prod" + i, seed: i, first: FIRSTS[i % 5], final: i % 2 ? "ai" : "first",
                                      contact: { name: "Person " + i, mobile: "90000000" + i }, ...extra }));
   const stored = (store, id) => { const r = f.db(store).get(id); return r ? JSON.parse(r.v) : null; };
   return { f, ev, evGet, produce, stored };

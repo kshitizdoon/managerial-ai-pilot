@@ -31,7 +31,7 @@ test("the server's scoring data matches js/cases.js and js/key.js (no drift)", a
   const committed = fs.readFileSync(path.join(ROOT, "netlify/lib/instrument-data.mjs"), "utf8");
   assert.ok(fresh === committed, "netlify/lib/instrument-data.mjs is stale: run `node make-docs.js` and commit the result");
   const data = await import("../netlify/lib/instrument-data.mjs");
-  assert.equal(data.INSTRUMENT_VERSION, "survey-2026-11-5x4");
+  assert.equal(data.INSTRUMENT_VERSION, "survey-2026-11-5x4-r50");
   assert.deepEqual(data.CASE_IDS, [3, 2, 5, 4, 1]);
 });
 

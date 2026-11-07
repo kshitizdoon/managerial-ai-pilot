@@ -41,31 +41,33 @@ function recordState(r){
   return all ? "complete" : "anomalous";
 }
 
-/* one row per person: case scores, AI levels, and every decision */
+/* one row per person: case scores, the AI advice, and every decision */
 function personRows(raw){
   const out = [];
   raw.filter(r => recordState(r) === "complete").forEach(r => {
     const cases = CASES.map(c => {
       const rec = r.cases[c.id];
-      const level = (rec.ai && rec.ai.level) || (r.aiLevels || {})[c.id];
-      /* the advice as shown, if it was kept with the answer */
-      const aiActions = (rec.ai && rec.ai.actions) || (level ? aiPlan(c, level).actions : {});
+      /* the advice as shown, kept with the answer. Right means the AI
+         gave the key's preferred action, whatever design drew it. */
+      const aiActions = (rec.ai && rec.ai.actions) || {};
       const first = scorePlan(c.id, rec.first), final = scorePlan(c.id, rec.final), ai = scorePlan(c.id, aiActions);
       const decisions = c.decisions.map(d => {
         const f = rec.first[d.k], g = rec.final[d.k], a = aiActions[d.k], pref = preferredAction(c.id, d.k);
         return {k: d.k, n: d.n, pos: (rec.decisionOrder || []).indexOf(d.k) + 1, pref, first: f, final: g, ai: a,
           firstScore: decisionScore(c.id, d.k, f), finalScore: decisionScore(c.id, d.k, g), aiScore: decisionScore(c.id, d.k, a),
+          aiRight: a === pref, gain: decisionScore(c.id, d.k, g) - decisionScore(c.id, d.k, f),
           changed: f !== g, disagreed: f !== a, tookAI: f !== a && g === a,
           tA: rec.tA ? rec.tA[d.k] : null, tB: rec.tB ? rec.tB[d.k] : null,
-          why: rec.ai && rec.ai.why ? rec.ai.why[d.k] : (level ? aiPlan(c, level).why[d.k] : "")};
+          why: rec.ai && rec.ai.why ? rec.ai.why[d.k] : ""};
       });
-      return {id: c.id, name: c.name, pos: rec.pos, level, aiScore: ai.total,
+      return {id: c.id, name: c.name, pos: rec.pos, level: (rec.ai && rec.ai.level) || null,
+        aiRight: ai.matches, aiScore: ai.total,
         first: first.total, final: final.total, gain: final.total - first.total,
         firstMatches: first.matches, conf: rec.conf ?? null, reason: rec.reason || "",
         minA: (rec.msA || 0) / 60000, minB: (rec.msB || 0) / 60000, errs: (rec.errA || 0) + (rec.errB || 0),
         decisions};
     });
-    out.push({pid: r.pid, condition: r.aiCondition, bg: r.bg,
+    out.push({pid: r.pid, condition: r.aiCondition ?? "", bg: r.bg,
       instrument: r.instrument || null,
       totalMin: r.totalMin != null ? r.totalMin : (new Date(r.finished) - new Date(r.started)) / 60000,
       cases, mda: mean(cases.map(x => x.first))});
@@ -82,8 +84,6 @@ function decisionRows(per){
   }));
   return rows;
 }
-
-const LEVEL_NAMES = {high: "High", moderate: "Moderate", low: "Low", very_low: "Very low"};
 
 function renderDashboard(raw, live, sources, opts){
   opts = opts || {};
@@ -173,39 +173,40 @@ function renderDashboard(raw, live, sources, opts){
       changed: 100 * s.filter(x => x.changed).length / s.length};
   })));
 
-  /* what people did with the advice, by quality level */
-  const levelStats = AI_LEVELS.map(l => {
-    const cs = allCases.filter(x => x.level === l);
-    const ds = [].concat(...cs.map(x => x.decisions));
+  /* what people did with the advice: decisions where it was right against
+     decisions where it was wrong. Scores are per decision, 0 to 20. */
+  const allDecs = [].concat(...allCases.map(x => x.decisions));
+  const adviceStats = [true, false].map(right => {
+    const ds = allDecs.filter(x => x.aiRight === right);
     const dis = ds.filter(x => x.disagreed);
-    const good = dis.filter(x => x.ai === x.pref), bad = dis.filter(x => x.ai !== x.pref);
-    const rate = a => a.length ? 100 * a.filter(x => x.tookAI).length / a.length : NaN;
-    return {l, n: cs.length, aiScore: mean(cs.map(x => x.aiScore)), first: mean(cs.map(x => x.first)),
-      final: mean(cs.map(x => x.final)), gain: mean(cs.map(x => x.gain)),
-      dis: dis.length, took: rate(dis), tookGood: rate(good), goodN: good.length, tookBad: rate(bad), badN: bad.length,
-      conf: mean(cs.map(x => x.conf).filter(x => x != null))};
+    return {right, n: ds.length, first: mean(ds.map(x => x.firstScore)), final: mean(ds.map(x => x.finalScore)),
+      gain: mean(ds.map(x => x.gain)), dis: dis.length,
+      took: dis.length ? 100 * dis.filter(x => x.tookAI).length / dis.length : NaN};
   });
 
-  /* main-run arithmetic: better advice (high, moderate) minus worse (low, very low) */
-  const better = l => l === "high" || l === "moderate";
-  const gains = allCases.map(x => x.gain);
-  const sigmaG = sd(gains);
+  /* main-run arithmetic: for each person, the mean change on decisions
+     with right advice minus the mean change on decisions with wrong
+     advice, in caselet points (one decision point = 5 caselet points,
+     since a caselet's four decisions sum to 80 and are scaled to 100) */
+  const PTS = 100 / (DECISION_MAX * CASES[0].decisions.length);
+  const decGain = d => d.gain * PTS;
+  const sigmaG = sd(allDecs.map(decGain));
   const dI = per.map(p => {
-    const g = p.cases.filter(c => better(c.level)).map(c => c.gain);
-    const b = p.cases.filter(c => !better(c.level)).map(c => c.gain);
+    const ds = [].concat(...p.cases.map(c => c.decisions));
+    const g = ds.filter(d => d.aiRight).map(decGain), b = ds.filter(d => !d.aiRight).map(decGain);
     return (g.length ? mean(g) : 0) - (b.length ? mean(b) : 0);
   });
   const sdD = sd(dI) || 1e-6;
   const abilityGain = corr(per.map(p => p.mda), dI);
-  const aiGainCorr = corr(allCases.map(x => x.aiScore), allCases.map(x => x.gain));
+  const rightShare = allDecs.length ? 100 * allDecs.filter(x => x.aiRight).length / allDecs.length : NaN;
 
   const flags = [];
   if(N >= 4){
     if(!(alpha > 0.4)) flags.push(`Cronbach's alpha over the ${J} case scores is ${fmt(alpha,2)}. The caselets are not yet measuring one thing; look at the decisions with low item-rest correlations first.`);
     if(med(times) > 25) flags.push(`Median run time is ${fmt(med(times))} minutes. Expect drop-out in the main run unless caselets are cut or shortened.`);
-    const hiTook = levelStats[0].took, loTook = levelStats[3].took;
-    if(Number.isFinite(hiTook) && Number.isFinite(loTook) && Math.abs(hiTook - loTook) < 5)
-      flags.push(`People switch to the AI's action at almost the same rate for high and very low advice (${pct(hiTook)} against ${pct(loTook)}). Either the advice quality is not visible or it is read as authority.`);
+    const rTook = adviceStats[0].took, wTook = adviceStats[1].took;
+    if(Number.isFinite(rTook) && Number.isFinite(wTook) && Math.abs(rTook - wTook) < 5)
+      flags.push(`People switch to the AI's action at almost the same rate when it is right and when it is wrong (${pct(rTook)} against ${pct(wTook)}). Either the advice quality is not visible or it is read as authority.`);
     decStats.forEach(s => {
       if(s.hit > 90) flags.push(`${s.c.name} / ${s.d.n}: ${pct(s.hit)} chose the preferred action first time. It adds little to the ability measure.`);
       if(s.itemRest < 0) flags.push(`${s.c.name} / ${s.d.n}: item-rest correlation ${fmt(s.itemRest,2)}. Those who score well on it score worse on the rest of the caselet; check its key.`);
@@ -215,7 +216,7 @@ function renderDashboard(raw, live, sources, opts){
   const act = a => `<span class="small" style="font-weight:600">${esc(actionLabel(a))}</span>`;
   paint(`
    <h1>Survey results</h1>
-   <p class="muted" id="counts">${counts}${live && !live.ok ? " (imported; no live database on this host)" : ""}. AI conditions among completed: ${esc(tally(per.map(p => "condition " + p.condition)))}.</p>
+   <p class="muted" id="counts">${counts}${live && !live.ok ? " (imported; no live database on this host)" : ""}. The AI advice was right on ${pct(rightShare)} of their decisions.</p>
    ${statusBlocks}
 
    <div class="kpi">
@@ -245,17 +246,17 @@ function renderDashboard(raw, live, sources, opts){
 
    <h2>What people did with the AI advice</h2>
    <div class="scroll"><table class="data" id="levels">
-     <tr><th>Advice quality</th><th>Caselets</th><th>Advice score</th><th>First score</th><th>Final score</th><th>Mean change</th><th>Switched to AI</th><th>…when AI was right</th><th>…when AI was wrong</th><th>Confidence</th></tr>
-     ${levelStats.map(s=>`<tr><td>${LEVEL_NAMES[s.l]}</td><td>${s.n}</td><td>${fmt(s.aiScore)}</td><td>${fmt(s.first)}</td><td>${fmt(s.final)}</td><td>${fmt(s.gain)}</td>
-       <td>${pct(s.took)}</td><td>${pct(s.tookGood)} <span class="muted">(${s.goodN})</span></td><td>${pct(s.tookBad)} <span class="muted">(${s.badN})</span></td><td>${fmt(s.conf)}</td></tr>`).join("")}
+     <tr><th>AI advice</th><th>Decisions</th><th>First score</th><th>Final score</th><th>Mean change</th><th>First answer differed from AI</th><th>Switched to AI</th></tr>
+     ${adviceStats.map(s=>`<tr><td>${s.right ? "Right" : "Wrong"}</td><td>${s.n}</td><td>${fmt(s.first)}</td><td>${fmt(s.final)}</td><td>${fmt(s.gain)}</td>
+       <td>${s.dis}</td><td>${pct(s.took)}</td></tr>`).join("")}
    </table></div>
-   <p class="small muted">Switched to AI counts decisions where the first answer differed from the AI and the final answer took the AI's action. "Right" means the AI gave the preferred action. Advice score correlates ${fmt(aiGainCorr,2)} with the change in case score. Ability correlates ${fmt(abilityGain,2)} with the better-minus-worse-advice change, which is your interaction, unadjusted.</p>
+   <p class="small muted">One row per decision answered. Scores are per decision, 0 to 20. "Right" means the AI gave the preferred action. Switched to AI counts decisions where the first answer differed from the AI and the final answer took the AI's action. Ability correlates ${fmt(abilityGain,2)} with the right-minus-wrong-advice change, which is your interaction, unadjusted.</p>
 
    <h2>What this means for the main run</h2>
    <div class="kpi">
-     <div><b>${fmt(sigmaG)}</b><span>SD of change per caselet</span></div>
-     <div><b>${fmt(sdD)}</b><span>SD of better minus worse advice</span></div>
-     <div><b>${fmt(mean(dI))}</b><span>mean better minus worse advice</span></div>
+     <div><b>${fmt(sigmaG)}</b><span>SD of change per decision, caselet points</span></div>
+     <div><b>${fmt(sdD)}</b><span>SD of right minus wrong advice</span></div>
+     <div><b>${fmt(mean(dI))}</b><span>mean right minus wrong advice</span></div>
    </div>
    <div class="scroll"><table class="data">
      <tr><th>Test</th><th>N=50</th><th>N=100</th><th>N=150</th><th>N=200</th></tr>
@@ -264,7 +265,7 @@ function renderDashboard(raw, live, sources, opts){
      <tr><td>Ability × advice quality, points per SD of ability</td>
        ${[50,100,150,200].map(n=>`<td>${fmt(mdeInteraction(sdD,n,relLoo))}</td>`).join("")}</tr>
    </table></div>
-   <p class="small muted">80% power, two-sided 5%, person fixed effects. Better advice is the high and moderate levels, worse is low and very low; every respondent sees both. To detect an interaction of 5 points per SD of ability you need about <b>${nNeeded(5,sdD,relLoo)}</b> people; 8 points, about <b>${nNeeded(8,sdD,relLoo)}</b>; 12 points, about <b>${nNeeded(12,sdD,relLoo)}</b>.</p>
+   <p class="small muted">80% power, two-sided 5%, person fixed effects. Points are caselet points (0 to 100); one decision point is ${fmt(PTS,0)} caselet points. Every respondent gets right advice on half of their decisions and wrong advice on the other half. To detect an interaction of 5 points per SD of ability you need about <b>${nNeeded(5,sdD,relLoo)}</b> people; 8 points, about <b>${nNeeded(8,sdD,relLoo)}</b>; 12 points, about <b>${nNeeded(12,sdD,relLoo)}</b>.</p>
 
    ${flags.length ? `<h2>Fix before the main run</h2>${flags.map(f=>`<p class="flag">${esc(f)}</p>`).join("")}`
      : `<h2>No automatic flags</h2><p class="small muted">${N<4?"Too few responses to flag anything yet.":"Nothing tripped a threshold. Read the comments below anyway."}</p>`}
@@ -374,14 +375,15 @@ function list(title, items){
 }
 
 /* One row per person and decision. The columns the manual asks for:
-   respondent, case, decision, first, final and AI action, AI condition
-   and level, the exact AI text, response times, confidence, and the
-   scoring-key version. */
+   respondent, case, decision, first, final and AI action, whether the
+   AI was right, the exact AI text, response times, confidence, and the
+   scoring-key version. ai_condition and ai_level are filled only for
+   responses from the earlier design with four advice levels. */
 const CSV_HEAD = ["pid","ai_condition","programme","experience","managed","ai_use","undergrad",
   "case_id","case_name","case_position","decision_id","decision_name","decision_position","preferred_action",
-  "first_action","final_action","ai_action","ai_level","first_score","final_score","ai_action_score",
+  "first_action","final_action","ai_action","ai_right","ai_level","first_score","final_score","ai_action_score",
   "changed","disagreed_with_ai","took_ai",
-  "case_first_score","case_final_score","case_change","case_ai_score","confidence","reason",
+  "case_first_score","case_final_score","case_change","case_ai_score","case_ai_right","confidence","reason",
   "case_minutes_first","case_minutes_final","decision_ms_first","decision_ms_final",
   "mda_all","mda_leave_one_out","ai_text",
   "instrument_version","scoring_version","recorded_cases_hash","recorded_key_hash",
@@ -396,9 +398,9 @@ function toCSV(per){
     const row = [p.pid, p.condition, p.bg&&p.bg.programme, p.bg&&p.bg.experience, p.bg&&p.bg.managed,
       p.bg&&p.bg.aiUse, p.bg&&p.bg.undergrad,
       c.id, c.name, c.pos, d.k, d.n, d.pos, d.pref,
-      d.first, d.final, d.ai, c.level, d.firstScore, d.finalScore, d.aiScore,
+      d.first, d.final, d.ai, b(d.aiRight), c.level || "", d.firstScore, d.finalScore, d.aiScore,
       b(d.changed), b(d.disagreed), b(d.tookAI),
-      c.first, c.final, c.gain, c.aiScore, c.conf, c.reason,
+      c.first, c.final, c.gain, c.aiScore, c.aiRight, c.conf, c.reason,
       r2(c.minA), r2(c.minB), d.tA, d.tB,
       r2(p.mda), r2(loo), d.why,
       I ? I.instrumentVersion : "", I ? I.scoringVersion : "", I ? I.casesHash : "", I ? I.keyHash : "",
@@ -447,7 +449,7 @@ function evaluatorRows(ev){
       evaluatorPid: e.pid, assignmentId: a.id, position: s.position, condition: s.condition, stratum: s.stratum,
       caseId: a.caseId, decisionIds: a.decisionIds, targetPid: s.target.pid, targetVersion: s.target.instrumentVersion,
       targetKeyHash: s.target.keyHash, targetScoringVersion: s.target.scoringVersion,
-      aiLevel: s.target.aiLevel, aiCaseScore: s.target.aiCaseScore, mda: s.target.mda, mdaLoo: s.target.mdaLoo,
+      aiLevel: s.target.aiLevel || "", aiRight: s.target.aiRight ?? "", aiCaseScore: s.target.aiCaseScore, mda: s.target.mda, mdaLoo: s.target.mdaLoo,
       caseFirstScore: s.target.caseFirstScore, rating: it.rating, ratingZ: v > 0 ? (it.rating - m) / v : 0,
       conf: it.conf, why: it.why || "", seconds: it.ms != null ? it.ms / 1000 : null, evaluatorMinutes: e.totalMin,
       display: s.display
@@ -503,7 +505,7 @@ function evaluatorSection(ev){
 
 const EV_CSV_HEAD = ["evaluator_pid","assignment_id","position","condition","case_id","decision_ids","target_pid","target_ability_third",
   "target_mda","target_mda_leave_one_out","target_case_first_score","target_instrument_version","target_key_hash","target_scoring_version",
-  "ai_level","ai_case_score","rating","rating_z_within_evaluator","confidence","explanation","seconds","evaluator_total_minutes","shown"];
+  "ai_level","ai_right_count","ai_case_score","rating","rating_z_within_evaluator","confidence","explanation","seconds","evaluator_total_minutes","shown"];
 function toEvaluatorCSV(rows){
   const r2 = x => Number.isFinite(x) ? Math.round(x * 100) / 100 : "";
   const lines = [EV_CSV_HEAD.join(",")];
@@ -511,7 +513,7 @@ function toEvaluatorCSV(rows){
     const shown = x.display.decisions.map(d => d.k + ":" + (d.first ? d.first + ">" : "") + (d.ai ? "[ai " + d.ai.action + "]" : "") + d.final).join(" ");
     const row = [x.evaluatorPid, x.assignmentId, x.position, x.condition, x.caseId, x.decisionIds.join(" "), x.targetPid, x.stratum,
       r2(x.mda), r2(x.mdaLoo), x.caseFirstScore, x.targetVersion, x.targetKeyHash, x.targetScoringVersion,
-      x.aiLevel, x.aiCaseScore, x.rating, r2(x.ratingZ), x.conf, x.why, r2(x.seconds), x.evaluatorMinutes, shown];
+      x.aiLevel, x.aiRight, x.aiCaseScore, x.rating, r2(x.ratingZ), x.conf, x.why, r2(x.seconds), x.evaluatorMinutes, shown];
     lines.push(row.map(v => { const t = String(v == null ? "" : v);
       return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(","));
   });

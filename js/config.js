@@ -5,14 +5,15 @@
 window.CONFIG = {
 
   /* ---- AI advice ---------------------------------------------------------
-     Every caselet has advice at four quality levels (cases.js). Each
-     respondent is given one of four conditions at random, and the
-     condition rotates the levels across the five caselets: caselet i (in
-     cases.js order) gets level (i + condition) mod 4. So every respondent
-     sees all four levels, one of them twice, and across the four
-     conditions every caselet appears at every level exactly once.
-     ?ai=0 .. ?ai=3 in the link forces a condition, for testing.          */
-  aiConditions: 4,
+     For each respondent the advice is right (the key's preferred action)
+     on this share of all decisions, chosen at random, and wrong on the
+     rest. 0.5 gives exactly 10 right and 10 wrong out of 20, so every
+     decision gets right advice for about half of respondents and wrong
+     advice for the other half. Wrong advice picks one of the decision's
+     wrong options at random (cases.js).
+     ?ai=right or ?ai=wrong in the link makes all advice right or all
+     wrong, for testing.                                                   */
+  aiRightShare: 0.5,
 
   /* ---- Name and mobile -------------------------------------------------
      "end"   asked on the last screen, for the prize draw.  (default)
@@ -25,7 +26,7 @@ window.CONFIG = {
 
   /* ---- Fielding -------------------------------------------------------- */
   randomiseCaseOrder: true,       // order of the five caselets
-  randomiseDecisionOrder: false,  // order of the four decisions: as numbered in the manual
+  randomiseDecisionOrder: true,   // order of the four decisions, shuffled per respondent and caselet
 
   /* ---- Where responses go ---------------------------------------------
      Netlify Function + Blobs is the only server store. The survey saves
@@ -58,7 +59,7 @@ window.CONFIG = {
      response and never changed afterwards. Give it a new name whenever
      you edit cases.js, key.js or the scoring, so responses collected
      under different versions can be told apart.                          */
-  instrumentVersion: "survey-2026-11-5x4",
+  instrumentVersion: "survey-2026-11-5x4-r50",
 
   /* ---- Copy ------------------------------------------------------------ */
   studyTitle: "Managerial Decision Survey",

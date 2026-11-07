@@ -11,7 +11,6 @@
 
 function caseById(id){ return CASES.find(c => c.id === id); }
 const ACTION_KEYS = ["own", "delegate", "wait", "hold"];
-const AI_LEVELS = ["high", "moderate", "low", "very_low"];
 
 /* ---- instrument version ---------------------------------------------
    instrumentMeta() is stamped once on every new response (survey.js) and
@@ -22,7 +21,7 @@ const AI_LEVELS = ["high", "moderate", "low", "very_low"];
    earlier pilot with quotas and named delegates is version 2, six
    caselets with five decisions each (October 2026) is version 3, and
    five caselets with four decisions each is version 4. */
-const SCORING_VERSION = 3;
+const SCORING_VERSION = 3;  // unchanged: the AI advice design is in instrumentMeta().aiDesign
 const RECORD_SCHEMA = 4;
 const DECISIONS_PER_CASE = 4;
 const DECISION_MAX = 20;
@@ -43,8 +42,6 @@ function fingerprint(x){
   return ("0000000" + h.toString(16)).slice(-8);
 }
 function instrumentMeta(){
-  const aiScores = {};
-  CASES.forEach(c => { aiScores[c.id] = {}; AI_LEVELS.forEach(l => { aiScores[c.id][l] = aiPlanScore(c, l); }); });
   return {
     instrumentVersion: CONFIG.instrumentVersion || null,
     scoringVersion: SCORING_VERSION,
@@ -53,9 +50,7 @@ function instrumentMeta(){
     scoringConfig: {decisionMax: DECISION_MAX, caseMax: 100, decisionsPerCase: DECISIONS_PER_CASE},
     caseIds: CASES.map(c => c.id),
     decisionIds: Object.fromEntries(CASES.map(c => [c.id, c.decisions.map(d => d.k)])),
-    aiLevels: AI_LEVELS,
-    aiConditions: CONFIG.aiConditions,
-    aiScores
+    aiDesign: {rightShare: CONFIG.aiRightShare, draw: "exact share of all decisions per respondent, at random"}
   };
 }
 /* Was this record made with the cases, key and scoring deployed now?
@@ -92,21 +87,43 @@ function scorePlan(caseId, plan){
   return {total: toCaseScale(total, c.decisions.length), parts, matches};
 }
 
-/* ---- AI advice -------------------------------------------------------- */
-/* the advice for one caselet at one level: {actions:{k}, why:{k}} */
-function aiPlan(c, level){
-  const a = c.ai[level], actions = {}, why = {};
-  c.decisions.forEach(d => { actions[d.k] = a[d.k][0]; why[d.k] = a[d.k][1]; });
-  return {level, actions, why};
-}
-function aiPlanScore(c, level){ return scorePlan(c.id, aiPlan(c, level).actions).total; }
+/* ---- AI advice --------------------------------------------------------
+   Each decision has one piece of right advice (the preferred action under
+   key.js, with its reason) and one or more pieces of wrong advice
+   (another action, with its reason): cases.js, c.ai[k] = {right, wrong}.
+   For each respondent, drawAdvice() makes the advice right on a random
+   CONFIG.aiRightShare of all decisions (exactly half by default, so 10 of
+   20) and wrong on the rest, picking one of the wrong options at random.
+   The draw is made once, at Start, and stored with the response. */
 
-/* The level each caselet gets under one condition. Caselet i, in
-   cases.js order, gets AI_LEVELS[(i + condition) mod 4]. */
-function aiAssignment(condition){
+/* the advice for one decision: right (true/false) and, if wrong, which option */
+function adviceFor(c, k, right, wrongIndex){
+  const a = c.ai[k];
+  if(right) return {action: preferredAction(c.id, k), why: a.right, right: true};
+  const w = a.wrong[(wrongIndex || 0) % a.wrong.length];
+  return {action: w[0], why: w[1], right: false};
+}
+
+/* {caseId: {actions:{k}, why:{k}, right:{k: true/false}}} for one respondent.
+   force: "right" or "wrong" makes every decision right or wrong (testing). */
+function drawAdvice(rng, force){
+  rng = rng || Math.random;
+  const all = [];
+  CASES.forEach(c => c.decisions.forEach(d => all.push([c, d.k])));
+  for(let i = all.length - 1; i > 0; i--){ const j = Math.floor(rng() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
+  const nRight = force === "right" ? all.length : force === "wrong" ? 0 : Math.round(all.length * CONFIG.aiRightShare);
   const out = {};
-  CASES.forEach((c, i) => { out[c.id] = AI_LEVELS[(i + condition) % AI_LEVELS.length]; });
+  CASES.forEach(c => { out[c.id] = {actions: {}, why: {}, right: {}}; });
+  all.forEach(([c, k], i) => {
+    const a = adviceFor(c, k, i < nRight, Math.floor(rng() * c.ai[k].wrong.length));
+    out[c.id].actions[k] = a.action; out[c.id].why[k] = a.why; out[c.id].right[k] = a.right;
+  });
   return out;
+}
+
+/* how many of a caselet's AI actions are the preferred ones */
+function adviceRightCount(caseId, actions){
+  return caseById(caseId).decisions.filter(d => actions && actions[d.k] === preferredAction(caseId, d.k)).length;
 }
 
 /* ---- load-time check -------------------------------------------------- */
@@ -131,20 +148,21 @@ function checkKey(){
       else if(preferredAction(c.id, k) === "own") ownPreferred++;
     });
     if(ownPreferred > 2) problems.push(`case ${c.id}: ${ownPreferred} decisions prefer Own; the design allows at most two`);
-    AI_LEVELS.forEach(l => {
-      const a = c.ai && c.ai[l];
-      if(!a){ problems.push(`case ${c.id}: no ${l} AI advice`); return; }
-      keys.forEach(k => {
-        const x = a[k];
-        if(!x || !ACTION_KEYS.includes(x[0]) || !String(x[1] || "").trim())
-          problems.push(`case ${c.id}: ${l} AI advice needs an action and a reason for "${k}"`);
+    Object.keys(c.ai || {}).forEach(k => { if(!keys.includes(k)) problems.push(`case ${c.id}: AI advice for "${k}", which is not a decision`); });
+    keys.forEach(k => {
+      const a = c.ai && c.ai[k];
+      if(!a || !String(a.right || "").trim()){ problems.push(`case ${c.id}: "${k}" needs a reason for the right AI advice`); return; }
+      if(!Array.isArray(a.wrong) || !a.wrong.length){ problems.push(`case ${c.id}: "${k}" needs at least one wrong AI advice`); return; }
+      const seen = [];
+      a.wrong.forEach(w => {
+        if(!Array.isArray(w) || !ACTION_KEYS.includes(w[0]) || !String(w[1] || "").trim())
+          problems.push(`case ${c.id}: wrong AI advice for "${k}" needs an action and a reason`);
+        else if(K[k] && w[0] === preferredAction(c.id, k))
+          problems.push(`case ${c.id}: wrong AI advice for "${k}" recommends the preferred action`);
+        else if(seen.includes(w[0])) problems.push(`case ${c.id}: wrong AI advice for "${k}" lists ${w[0]} twice`);
+        seen.push(w && w[0]);
       });
     });
-    if(!problems.some(p => p.startsWith(`case ${c.id}:`))){
-      const s = AI_LEVELS.map(l => aiPlanScore(c, l));
-      for(let i = 1; i < s.length; i++)
-        if(!(s[i] < s[i - 1])) problems.push(`case ${c.id} (${c.name}): AI advice must get weaker level by level, but scores ${s.join(", ")}`);
-    }
   });
   problems.push(...checkOrderRules());
   if(problems.length){

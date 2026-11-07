@@ -58,7 +58,7 @@ test("the instrument stamp does not change when a response is resumed", async ()
   assert.deepEqual(env.fn.stored(record.pid).instrument, record.instrument, "the server keeps the first stamp");
 });
 
-test("dashboard: counts, status tables, decisions, AI levels, raw JSON and CSV", async () => {
+test("dashboard: counts, status tables, decisions, right and wrong advice, raw JSON and CSV", async () => {
   /* seed: the fresh complete record is stored; add an earlier-pilot
      record, an unfinished one, and a finished-but-short one */
   await env.fn.post(earlierPilotRecord("oldpilot"));
@@ -96,7 +96,7 @@ test("dashboard: counts, status tables, decisions, AI levels, raw JSON and CSV",
   assert.equal(await page.$$eval("#decisions tr", t => t.length), 1 + 20);
   assert.equal(await page.$("#attn"), null, "no attention-check block");
   assert.doesNotMatch(await page.textContent("#app"), /What people said|Wait vs Hold clear|attention check/);
-  assert.deepEqual(await page.$$eval("#levels tr td:first-child", t => t.map(x => x.textContent)), ["High", "Moderate", "Low", "Very low"]);
+  assert.deepEqual(await page.$$eval("#levels tr td:first-child", t => t.map(x => x.textContent)), ["Right", "Wrong"]);
 
   /* raw JSON: every stored record, as stored */
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#json")]);

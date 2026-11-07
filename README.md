@@ -3,8 +3,9 @@
 Five managerial situations ("caselets"), each with four decisions. For every
 decision the respondent picks one of four actions: Own, Delegate, Wait or
 Hold. They then see an AI advisor's recommendation for the same four
-decisions and give final answers. The advice comes at four quality levels,
-so the study can ask whether ability shows up in how people use AI advice.
+decisions and give final answers. The advice is right on a random half of
+each respondent's decisions and wrong on the other half, so the study can
+ask whether ability shows up in how people use AI advice.
 
 The instrument follows the researcher manual of 8 October 2026
 (*Managerial_Decision_Survey_Manual_v3_round2*, tracked changes accepted).
@@ -32,12 +33,12 @@ Plain HTML, CSS and JavaScript. No build step, no framework.
 
 | File | What it holds |
 | --- | --- |
-| `js/config.js` | The knobs: AI conditions, randomisation, contact details, instrument version. Start here. |
-| `js/cases.js` | Everything respondents read: instructions, the four actions, caselets, decisions, AI advice at four levels. |
+| `js/config.js` | The knobs: share of right AI advice, randomisation, contact details, instrument version. Start here. |
+| `js/cases.js` | Everything respondents read: instructions, the four actions, caselets, decisions, right and wrong AI advice for each decision. |
 | `js/art.js` | One small illustration per caselet, for its header. |
 | `js/key.js` | The scoring key: 0 to 20 for each action on each decision. Not shown to anyone. |
 | `js/order.js` | Constrained randomisation: shuffles caselets (and decisions, if switched on), keeps declared `after` constraints, and validates them. |
-| `js/scoring.js` | Scores answers and advice, assigns advice levels, checks the key at load. |
+| `js/scoring.js` | Scores answers and advice, draws each respondent's advice, checks the key at load. |
 | `js/stats.js` | Alpha, correlations, power arithmetic. |
 | `js/storage.js` | Where responses go. |
 | `js/survey.js` | The respondent's side, Part 1 (Producer). |
@@ -178,7 +179,7 @@ push.
 - Open the site, press **Start**, and finish one caselet. Open the browser
   console: the page checks the key and the advice against the cases at
   load, and a red band appears at the top if anything is wrong.
-- Add `?ai=0` to `?ai=3` to the link to see a given AI condition.
+- Add `?ai=right` or `?ai=wrong` to the link to see all-right or all-wrong advice.
 - Complete a full run yourself, then open the results view and confirm your
   own response appears.
 - Send the link to one person on another network before sending it to ten.
@@ -192,10 +193,10 @@ the fixture and `cases.js` together.
 
 **Scores** → `js/key.js`. Every decision needs all four actions scored 0 to
 20, with exactly one 20. The page refuses to stay quiet otherwise, and also
-if a caselet prefers Own on more than two decisions or its advice does not
-get weaker level by level.
+if a caselet prefers Own on more than two decisions, or a decision lacks
+right advice or has wrong advice that recommends the preferred action.
 
-**AI conditions** → `aiConditions` in `js/config.js`. See *The design*.
+**Share of right advice** → `aiRightShare` in `js/config.js`. See *The design*.
 
 **Name and mobile** → `contactAt` in `js/config.js`: `"end"` (default),
 `"start"` or `"off"`. The default is the last screen. A managerial
@@ -214,28 +215,25 @@ decision, the four final answers (the first answers start selected) and an
 optional confidence rating and reason. The last page asks About you (five
 questions) and the optional prize-draw details; the debrief closes it.
 
-**Order.** Caselet order is randomised per respondent. Decisions inside a
-caselet keep the manual's numbering (`randomiseDecisionOrder: false`). Both
-orders are stored on every response. Declare a constraint with
+**Order.** Caselet order and the order of decisions inside each caselet are
+randomised per respondent. Both orders are stored on every response. Declare a constraint with
 `after:["otherKey"]` on a decision, or `CASE_AFTER = {laterId:[earlierId]}`
 for caselets; `order.js` enforces it and `checkOrderRules()` reports any
 that name something missing or form a loop.
 
-**AI advice.** Each respondent gets one of four conditions at random. The
-condition rotates the levels across the caselets: caselet *i* in `cases.js`
-order gets level (*i* + condition) mod 4. So every respondent sees all four
-levels (one of them twice) and, across the four conditions, every caselet
-appears at every level once. The level, the advice shown and its score are
-stored with each caselet's answers. Levels and scores are never shown.
+**AI advice.** Every decision has one right advice (the key's preferred
+action, with its reason) and one or more wrong ones (another action, with
+its reason). At Start, each respondent's 20 decisions are shuffled and the
+advice is right on exactly half of them (`aiRightShare: 0.5`) and wrong on
+the rest; wrong advice picks one of the decision's wrong options at random.
+So every decision gets right advice for about half of respondents, and a
+caselet can get anywhere from 0 to 4 right. The advice shown, whether each
+piece was right, and the caselet's advice score are stored with each
+caselet's answers. None of it is shown to respondents.
 
-Every caselet scores the same at each level:
-
-| Level | Advice score | Preferred actions |
-| --- | --- | --- |
-| High | 92.5 | 3 of 4 |
-| Moderate | 67.5 | 2 of 4 |
-| Low | 35 | 1 of 4 |
-| Very low | 27.5 | 0 of 4 |
+Responses from the earlier design (four advice levels rotated by condition,
+`survey-2026-11-5x4`) keep their stored advice, and the results view scores
+them the same way: advice is right where it gave the preferred action.
 
 **Scoring.** Each action on each decision scores 0 to 20; the preferred
 action scores 20. A caselet score is the sum of its four decisions,
@@ -244,8 +242,8 @@ advice alike. AI gain is final
 minus first. The ability score is the mean first-answer caselet score; the
 CSV also carries the leave-one-caselet-out version.
 
-**What respondents never see.** The key, the preferred action, the advice
-level and its score. The four actions share one neutral style, so no colour
+**What respondents never see.** The key, the preferred action, whether the
+advice is right, and its score. The four actions share one neutral style, so no colour
 suggests an answer. The caselet illustration belongs to the caselet and
 says nothing about any decision.
 
@@ -279,18 +277,18 @@ AI recommendation shown is copied from the target's record.
 leave-one-caselet-out pre-AI ability. Several choices rotate so each is the
 least used so far: which third gets which condition, the order, the
 caselet, and the decision triple. Then the least-shown target is
-preferred, then the one whose advice level and instrument version are least
-used under that condition.
+preferred, then the one whose number of right-advice decisions in that
+caselet, and then instrument version, are least used under that condition.
 
 **Privacy.** The Producer dataset stays on the server. A browser receives
 only the actions and advice for its three people, under opaque tokens. It
 never receives a PID, name, phone number, background answer, ability
-score, advice level or condition label. Assignments are stored, so a
+score, whether advice was right, or condition label. Assignments are stored, so a
 reload shows the same people in the same order.
 
 **Records.** Evaluator records live in their own store (`evaluator-responses`)
 under the same PID as the Producer record, which Part 2 never changes.
-Assignments, with each target's ability, advice level and instrument
+Assignments, with each target's ability, right-advice count and instrument
 version, live in `evaluator-assignments`. The results view has a separate
 Part 2 section and its own CSV (one row per rating) and raw JSON.
 
@@ -321,9 +319,9 @@ only after your ethics approval covers it.
 ## Documentation
 
 `node make-docs.js` writes `docs/instrument.md` from `cases.js`, `key.js`
-and `scoring.js`: the instructions, the condition table,
-every caselet and decision as respondents read them, the key, and all four
-levels of advice with their scores. Regenerate it after any edit; a test
+and `scoring.js`: the instructions, how advice is drawn,
+every caselet and decision as respondents read them, the key, and the right
+and wrong advice for every decision. Regenerate it after any edit; a test
 fails if it is stale.
 
 ---

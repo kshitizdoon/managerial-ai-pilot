@@ -9,11 +9,10 @@ const run = src => plain(site.run(src));
 /* If one of these changes, cases.js or key.js changed. That is allowed,
    but it is a new instrument version: rename CONFIG.instrumentVersion,
    regenerate docs, and update these two pins in the same commit. */
-const PINNED = { instrumentVersion: "survey-2026-11-5x4", casesHash: "89a568b4", keyHash: "7733efcb", scoringVersion: 3 };
+const PINNED = { instrumentVersion: "survey-2026-11-5x4-r50", casesHash: "5e4897f8", keyHash: "7733efcb", scoringVersion: 3 };
 
 test("instrumentMeta describes the deployed instrument", () => {
   const m = run("instrumentMeta()");
-  const levels = { high: 92.5, moderate: 67.5, low: 35, very_low: 27.5 };
   assert.deepEqual(m, {
     instrumentVersion: PINNED.instrumentVersion,
     scoringVersion: PINNED.scoringVersion,
@@ -27,9 +26,7 @@ test("instrumentMeta describes the deployed instrument", () => {
       5: ["registration", "sponsor", "venue", "programming"],
       4: ["escalation", "guarantee", "process", "recovery"],
       1: ["corporate", "announcement", "readiness", "trainers"] },
-    aiLevels: ["high", "moderate", "low", "very_low"],
-    aiConditions: 4,
-    aiScores: { 1: levels, 2: levels, 3: levels, 4: levels, 5: levels }
+    aiDesign: { rightShare: 0.5, draw: "exact share of all decisions per respondent, at random" }
   });
   assert.equal(run("RECORD_SCHEMA"), 4);
 });

@@ -32,34 +32,40 @@ test("page boots with no instrument warnings or script errors; the welcome text 
   assert.deepEqual(page.errors, []);
 });
 
-test("full run: five caselets, four decisions each in the manual's order, advice as assigned, About you last, checkpoints land", async () => {
+test("full run: five caselets, four decisions each in a shuffled order, advice as drawn, About you last, checkpoints land", async () => {
   const page = await env.newPage();
   const before = env.api.posts.length;
-  const { seen, record } = await playSurvey(page, env.base, { query: "?new=1&ai=1" });
+  const { seen, record } = await playSurvey(page, env.base);
   assert.deepEqual(page.errors, []);
 
   assert.deepEqual([...seen.map(s => s.name)].sort(), [...CASE_NAMES].sort());
-  assert.equal(record.aiCondition, 1);
-  assert.deepEqual(record.aiLevels, nrun("aiAssignment(1)"));
+  assert.equal(record.aiCondition, undefined);
+  assert.equal(record.aiLevels, undefined);
+  assert.equal(record.aiRightShare, 0.5);
+  /* advice right on exactly 10 of the 20 decisions */
+  assert.equal([].concat(...Object.values(record.advice).map(a => Object.values(a.right))).filter(Boolean).length, 10);
 
   for (const s of seen) {
     const id = nrun(`CASES.find(c => c.name === ${JSON.stringify(s.name)}).id`);
-    const titles = nrun(`caseById(${id}).decisions.map(d => d.n)`);
-    assert.deepEqual(s.first, titles, `${s.name}: first-answer screen in manual order`);
+    const rec = record.cases[id];
+    const titles = rec.decisionOrder.map(k => nrun(`caseById(${id}).decisions.find(d => d.k === ${JSON.stringify(k)}).n`));
+    assert.deepEqual([...rec.decisionOrder].sort(), nrun(`caseById(${id}).decisions.map(d => d.k)`).sort());
+    assert.deepEqual(s.first, titles, `${s.name}: first-answer screen in the stored order`);
     assert.deepEqual(s.finalTitles, titles, `${s.name}: final screen in the same order`);
     /* the final screen shows the first answers and preselects them */
     assert.deepEqual(s.mine, s.keys.map(k => s.answers[k]));
     assert.deepEqual(s.preselected, s.keys.map(k => s.answers[k]));
-    /* the advice shown is the assigned level's, action and reason */
-    const ai = nrun(`aiPlan(caseById(${id}), ${JSON.stringify(record.aiLevels[id])})`);
+    /* the advice shown is the drawn advice, action and reason */
+    const ai = record.advice[id];
     assert.deepEqual(s.advice, s.keys.map(k => ai.actions[k]), `${s.name}: advice actions`);
     assert.deepEqual(s.adviceText, s.keys.map(k => ai.why[k]), `${s.name}: advice text`);
+    for (const k of s.keys) assert.equal(ai.right[k], ai.actions[k] === nrun(`preferredAction(${id}, ${JSON.stringify(k)})`));
     /* and the record keeps what was shown, and the answers given */
-    const rec = record.cases[id];
     assert.deepEqual(rec.first, s.answers);
     assert.deepEqual(rec.final, s.final === "ai" ? ai.actions : s.answers);
-    assert.deepEqual(rec.ai, { condition: 1, level: record.aiLevels[id], actions: ai.actions, why: ai.why,
-      score: nrun(`aiPlanScore(caseById(${id}), ${JSON.stringify(record.aiLevels[id])})`) });
+    assert.deepEqual(rec.ai, { actions: ai.actions, why: ai.why, right: ai.right,
+      rightCount: nrun(`adviceRightCount(${id}, ${JSON.stringify(ai.actions)})`),
+      score: nrun(`scorePlan(${id}, ${JSON.stringify(ai.actions)}).total`) });
     assert.deepEqual(rec.decisionOrder, s.keys);
     assert.equal(rec.conf, 3);
     assert.equal(Object.keys(rec.tA).length, 4);
@@ -89,12 +95,19 @@ test("full run: five caselets, four decisions each in the manual's order, advice
   assert.equal(record.savedVia, "function");
 });
 
-test("every respondent sees all four advice levels", async () => {
-  const page = await env.newPage();
-  const { record } = await playSurvey(page, env.base, { finish: false });
-  const levels = Object.values(record.cases).map(c => c.ai.level);
-  assert.deepEqual([...new Set(levels)].sort(), ["high", "low", "moderate", "very_low"]);
-  assert.ok(record.aiCondition >= 0 && record.aiCondition < 4);
+test("?ai=right and ?ai=wrong make all advice right or all wrong", async () => {
+  for (const f of ["right", "wrong"]) {
+    const page = await env.newPage();
+    const { record } = await playSurvey(page, env.base, { finish: false, query: "?new=1&ai=" + f });
+    const counts = Object.values(record.cases).map(c => c.ai.rightCount);
+    assert.deepEqual(counts, Array(5).fill(f === "right" ? 4 : 0));
+  }
+});
+
+test("two respondents get different advice and different decision orders", async () => {
+  const a = (await playSurvey(await env.newPage(), env.base, { finish: false, stopAfterCases: 1 })).record;
+  const b = (await playSurvey(await env.newPage(), env.base, { finish: false, stopAfterCases: 1 })).record;
+  assert.notDeepEqual(a.advice, b.advice);
 });
 
 test("no practice screen: how it works leads straight to the first caselet", async () => {
@@ -239,9 +252,11 @@ test("each caselet shows its key numbers and, under every decision, what is to b
   const page = await env.newPage();
   await playSurvey(page, env.base, { stopAfterCases: 0, finish: false });
   const name = await page.textContent(".sit h2");
-  const c = nrun(`(() => { const c = CASES.find(c => c.name === ${JSON.stringify(name)}); return {facts: c.facts, q: c.decisions.map(d => d.q)}; })()`);
+  const c = nrun(`(() => { const c = CASES.find(c => c.name === ${JSON.stringify(name)}); return {facts: c.facts, q: Object.fromEntries(c.decisions.map(d => [d.k, d.q]))}; })()`);
   assert.deepEqual(await page.$$eval(".facts li", e => e.map(x => [x.querySelector("b").textContent, x.querySelector("span").textContent])), c.facts);
-  assert.deepEqual(await page.$$eval(".decision .ask", e => e.map(x => x.textContent)), c.q.map(q => "To decide: " + q));
+  const shown = await page.$$eval(".decision", e => e.map(x => [x.dataset.k, x.querySelector(".ask").textContent]));
+  assert.equal(shown.length, 4);
+  for (const [k, ask] of shown) assert.equal(ask, "To decide: " + c.q[k]);
 });
 
 test("the four actions look the same when selected: no colour per action", async () => {

@@ -17,7 +17,7 @@ function rng(seed = 1){ let x = seed; return () => { x = (x * 1103515245 + 12345
 
 /* n eligible Producers with different abilities (different first answers) */
 function pool(n, extra = {}){
-  return Array.from({ length: n }, (_, i) => makeRecord(site, { pid: "prod" + i, condition: i % 4, first: FIRSTS[i % FIRSTS.length], final: i % 2 ? "ai" : "first", ...extra }));
+  return Array.from({ length: n }, (_, i) => makeRecord(site, { pid: "prod" + i, seed: i, first: FIRSTS[i % FIRSTS.length], final: i % 2 ? "ai" : "first", ...extra }));
 }
 
 test("pre-AI ability matches the dashboard's scoring, with and without the shown caselet", () => {
@@ -110,7 +110,8 @@ test("what is shown is copied from the target's own record, decision by decision
         if (s.condition === "C") { assert.deepEqual(Object.keys(d).sort(), ["ai", "final", "first", "k"]); assert.equal(d.first, rec.first[d.k]); }
         if (d.ai) assert.deepEqual(d.ai, { action: rec.ai.actions[d.k], why: rec.ai.why[d.k] }, "exact advice the target saw");
       }
-      assert.equal(s.target.aiLevel, rec.ai.level);
+      assert.equal(s.target.aiLevel, null, "no advice level in this design");
+      assert.equal(s.target.aiRight, rec.ai.rightCount, "how many of the caselet's decisions got right advice");
       assert.equal(s.target.mda, core.mda(recs.find(r => r.pid === s.target.pid)));
     }
   }

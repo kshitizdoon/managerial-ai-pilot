@@ -1,5 +1,5 @@
-/* Caselet and decision order. Caselets are randomised; decisions keep
-   the manual's numbering. Declared constraints must always hold. */
+/* Caselet and decision order. Both are randomised per respondent.
+   Declared constraints must always hold. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { loadSite, plain } from "./helpers/load.mjs";
@@ -13,15 +13,18 @@ test("no order constraints are declared, and the checker is clean", () => {
   assert.deepEqual(run("checkOrderRules()"), []);
 });
 
-test("caselet order is randomised; decision order is fixed", () => {
+test("caselet order and decision order are both randomised", () => {
   assert.equal(run("CONFIG.randomiseCaseOrder"), true);
-  assert.equal(run("CONFIG.randomiseDecisionOrder"), false);
+  assert.equal(run("CONFIG.randomiseDecisionOrder"), true);
 });
 
-test("decisions always come in the manual's order", () => {
-  const res = run(`CASES.map(c => { const want = c.decisions.map(d => d.k).join();
-    for(let t = 0; t < 200; t++) if(decisionOrderFor(c).join() !== want) return false; return true; })`);
-  assert.deepEqual(res, [true, true, true, true, true]);
+test("decision order is a permutation and every decision reaches every position", () => {
+  const res = run(`CASES.map(c => { const seen = {}, orders = {}; let bad = 0;
+    for(let t = 0; t < 3000; t++){ const o = decisionOrderFor(c);
+      if(o.length !== 4 || new Set(o).size !== 4 || o.some(k => !c.decisions.some(d => d.k === k))) bad++;
+      o.forEach((k, i) => { seen[k + ":" + i] = 1; }); orders[o.join()] = 1; }
+    return [bad, Object.keys(seen).length, Object.keys(orders).length]; })`);
+  assert.deepEqual(res, Array(5).fill([0, 16, 24]));
 });
 
 test("caselet order is a permutation and reaches every order position for every caselet", () => {

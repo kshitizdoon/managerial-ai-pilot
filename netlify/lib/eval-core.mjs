@@ -17,7 +17,7 @@
      which condition, the presentation order, the caselet and the
      decision triple are each the least used so far (random among ties),
      so they balance across evaluators. Within a third, the target is
-     the least shown so far, then the one whose AI-advice level and
+     the least shown so far, then the one whose right-advice count and
      instrument version are least used under its condition.
    ============================================================= */
 
@@ -124,7 +124,14 @@ function leastUsed(items, use, rng, tiebreak = []) {
   keyed.sort((p, q) => { for (let i = 0; i < p.k.length; i++) if (p.k[i] !== q.k[i]) return p.k[i] - q.k[i]; return 0; });
   return keyed[0].x;
 }
+/* the advice level, for responses from the earlier four-level design */
 const levelOf = (r, caseId) => (r.cases[caseId].ai && r.cases[caseId].ai.level) || (r.aiLevels || {})[caseId] || null;
+const preferred = (caseId, k) => ACTIONS.reduce((b, a) => KEY[caseId][k][a] > KEY[caseId][k][b] ? a : b, ACTIONS[0]);
+/* how many of the caselet's decisions got right advice (the preferred action) */
+export function adviceRight(r, caseId) {
+  const ai = r.cases[caseId].ai || {};
+  return CASE_DECISIONS[caseId].filter(k => ai.actions && ai.actions[k] === preferred(caseId, k)).length;
+}
 const versionOf = r => (r.instrument && r.instrument.instrumentVersion) || "unrecorded";
 
 /* exactly what the evaluator sees for one target under one condition:
@@ -153,7 +160,7 @@ export function chooseAssignment(records, prior, evaluatorPid, s, rng = Math.ran
   prior.forEach(a => {
     caseUse.add(a.caseId); tripleUse.add(a.caseId + ":" + a.decisionIds.join(","));
     permUse.add(a.permIndex); orderUse.add(a.orderIndex);
-    a.slots.forEach(sl => { targetUse.add(sl.target.pid); condLevel.add(sl.condition + ":" + sl.target.aiLevel);
+    a.slots.forEach(sl => { targetUse.add(sl.target.pid); condLevel.add(sl.condition + ":" + sl.target.aiRight);
                             condVersion.add(sl.condition + ":" + sl.target.instrumentVersion); });
   });
 
@@ -171,7 +178,7 @@ export function chooseAssignment(records, prior, evaluatorPid, s, rng = Math.ran
   const slots = STRATA.map((stratum, g) => {
     const condition = CONDITION_PERMS[permIndex][g];
     const r = leastUsed(thirds[g], x => targetUse.get(x.pid), rng, [
-      x => condLevel.get(condition + ":" + levelOf(x, caseId)),
+      x => condLevel.get(condition + ":" + adviceRight(x, caseId)),
       x => condVersion.get(condition + ":" + versionOf(x))
     ]);
     const ai = r.cases[caseId].ai;
@@ -187,6 +194,7 @@ export function chooseAssignment(records, prior, evaluatorPid, s, rng = Math.ran
         scoringVersion: (r.instrument && r.instrument.scoringVersion) || null,
         aiCondition: r.aiCondition ?? null,
         aiLevel: levelOf(r, caseId),
+        aiRight: adviceRight(r, caseId),
         aiCaseScore: ai && Number.isFinite(ai.score) ? ai.score : null,
         caseFirstScore: caseFirstScore(r, caseId),
         mda: mda(r),
@@ -209,7 +217,7 @@ export function chooseAssignment(records, prior, evaluatorPid, s, rng = Math.ran
 }
 
 /* what the browser gets: decisions to show and an opaque token per person.
-   No pid, no condition letter, no ability score, no advice level. */
+   No pid, no condition letter, no ability score, no advice quality. */
 export function clientView(a) {
   return {
     assignmentId: a.id,

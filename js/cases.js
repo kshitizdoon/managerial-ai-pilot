@@ -18,12 +18,15 @@
      Employee development, Fest Week / Event staffing, Friday Support
      Team / Weekend service allocation, Launch Morning / Team
      responsibilities. They duplicated decisions kept elsewhere.
-   - Some AI actions were moved so that every caselet scores the same at
-     each advice level on its four decisions (out of 80: high 74,
-     moderate 54, low 28, very low 22; one, two, three and four
-     decisions away from the preferred action). Each moved action reuses
-     the reason written for that action at another level, except Monday
-     Project Team / Revised recommendation at very low, which is new.
+   - The four advice levels are gone. Advice is right or wrong per
+     decision, drawn at random for each respondent (config.js
+     aiRightShare). Each decision's right and wrong advice were taken
+     from the earlier levels. Four decisions had no right advice at any
+     level and now have a new one: Monday Project Team / Delivery
+     recovery, Strong Employee / Client presentation, Friday Support
+     Team / Client recovery plan, Launch Morning / Customer experience.
+   - Strong Employee / Financial commitment is reworded in plainer
+     language; its facts are unchanged.
    - The practice questions and the Own-versus-Delegate example are gone,
      and the instructions are shorter.
    The key is the manual's.
@@ -38,9 +41,11 @@
                t the text, q what is to be decided (shown after
                "To decide:"). Add after:["k"] to a decision if it must
                follow another one when decision order is randomised.
-     ai        the advisor's action and one-line reason for each
-               decision, at four quality levels. Quality is the plan's
-               own score under key.js; it is never shown to respondents.
+     ai        for each decision, {right, wrong}: right is the reason
+               shown when the advice gives the preferred action (key.js);
+               wrong is a list of [action, reason] for advice that does
+               not. scoring.js drawAdvice() picks, per respondent, which
+               decisions get right advice. Never shown to respondents.
 
    Same rules as before for the text itself: no label words on a
    decision ("urgent", "can wait", "delegate", "check first"), and no
@@ -93,26 +98,18 @@ window.CASES = [
      t:"A high-performing project lead has requested a discussion about taking on a larger role. The employee has recently taken on additional responsibilities and expects clarity about future opportunities. You have a view on their readiness, and the next formal role review is scheduled for later this month.",
      q:"how to respond to the project lead's request about a larger role."}],
   ai: {
-    high: {
-      expansion: ["hold", "A binding scope and timeline promise depends on regulatory implications that have not been assessed. Deferring merely for convenience does not address that prerequisite."],
-      recommendation: ["own", "The manager personally agreed the assumptions now being revised, making ownership of the final recommendation more valuable than merely checking the calculations."],
-      recovery: ["delegate", "Both project leads know their projects and milestones best. They can agree the reallocation between themselves, which keeps the manager's limited time for client-facing matters today."],
-      career: ["wait", "The career discussion matters, but the next review is later this month and immediate client demands have earlier deadlines."]},
-    moderate: {
-      expansion: ["wait", "The client wants a commitment by tomorrow, not today. The manager can give the expansion proper attention tomorrow morning, once today's more pressing client matters are dealt with."],
-      recommendation: ["own", "The manager personally agreed the assumptions now being revised, making ownership of the final recommendation more valuable than merely checking the calculations."],
-      recovery: ["hold", "The second lead is concerned about upcoming milestones. The effect of losing two consultants on that project should be assessed before anyone commits to the reallocation."],
-      career: ["wait", "The career discussion matters, but the next review is later this month and immediate client demands have earlier deadlines."]},
-    low: {
-      expansion: ["own", "A long-standing client is asking to grow the engagement, and the team has delivered similar work before. A firm commitment from the manager secures the opportunity and reassures the client."],
-      recommendation: ["own", "The manager personally agreed the assumptions now being revised, making ownership of the final recommendation more valuable than merely checking the calculations."],
-      recovery: ["hold", "The second lead is concerned about upcoming milestones. The effect of losing two consultants on that project should be assessed before anyone commits to the reallocation."],
-      career: ["hold", "Readiness should be judged against evidence from the employee's recent additional responsibilities. Gathering that input from others before the conversation would make the discussion fairer."]},
-    very_low: {
-      expansion: ["own", "A long-standing client is asking to grow the engagement, and the team has delivered similar work before. A firm commitment from the manager secures the opportunity and reassures the client."],
-      recommendation: ["delegate", "The project lead built the updated numbers and knows the revised assumptions in detail. The lead can finalise the recommendation and send it by 1:00 PM."],
-      recovery: ["hold", "The second lead is concerned about upcoming milestones. The effect of losing two consultants on that project should be assessed before anyone commits to the reallocation."],
-      career: ["hold", "Readiness should be judged against evidence from the employee's recent additional responsibilities. Gathering that input from others before the conversation would make the discussion fairer."]}}
+    expansion:      {right: "A binding scope and timeline promise depends on regulatory implications that have not been assessed. Deferring merely for convenience does not address that prerequisite.",
+                     wrong: [["wait", "The client wants a commitment by tomorrow, not today. The manager can give the expansion proper attention tomorrow morning, once today's more pressing client matters are dealt with."],
+                             ["own", "A long-standing client is asking to grow the engagement, and the team has delivered similar work before. A firm commitment from the manager secures the opportunity and reassures the client."]]},
+    recommendation: {right: "The manager personally agreed the assumptions now being revised, making ownership of the final recommendation more valuable than merely checking the calculations.",
+                     wrong: [["delegate", "The project lead built the updated numbers and knows the revised assumptions in detail. The lead can finalise the recommendation and send it by 1:00 PM."],
+                             ["hold", "The revised numbers change assumptions agreed last year. The updated figures should be independently verified before anything goes to the client, so the recommendation does not need correcting later."]]},
+    recovery:       {right: "Moving two consultants affects two projects and two clients, and the second lead has concerns about milestones. The manager should decide the reallocation today so both clients get updates.",
+                     wrong: [["delegate", "Both project leads know their projects and milestones best. They can agree the reallocation between themselves, which keeps the manager's limited time for client-facing matters today."],
+                             ["hold", "The second lead is concerned about upcoming milestones. The effect of losing two consultants on that project should be assessed before anyone commits to the reallocation."],
+                             ["wait", "Both clients expect updates today, but the staffing change itself need not be settled this morning. It can be decided once today's client responses have gone out."]]},
+    career:         {right: "The career discussion matters, but the next review is later this month and immediate client demands have earlier deadlines.",
+                     wrong: [["hold", "Readiness should be judged against evidence from the employee's recent additional responsibilities. Gathering that input from others before the conversation would make the discussion fairer."]]}}
 },
 
 {
@@ -125,7 +122,7 @@ window.CASES = [
      t:"A client has questioned a recommendation that could affect its annual operating budget. The senior analyst who developed the analysis believes the recommendation is sound, but the client has challenged the team's commercial assumptions in earlier discussions. The client expects your team's position by 2:00 PM.",
      q:"the team's position on the challenged recommendation, due by 2:00 PM."},
     {k:"funding", n:"Financial commitment",
-     t:"Finance has asked you to approve \u20b94 lakh for additional analytical support before today\u2019s vendor deadline. The support could strengthen tomorrow\u2019s client presentation. The team can begin some work using existing data, but completing the proposed analysis depends on client information expected later today. The vendor requires a commitment for the full amount.",
+     t:"Finance needs your approval today to pay a vendor \u20b94 lakh for extra analysis for tomorrow\u2019s client presentation. The vendor wants a commitment for the full amount before its deadline today. Your team can start part of the work with data it already has. The rest needs information from the client, expected later today.",
      q:"whether to approve the \u20b94 lakh vendor commitment today."},
     {k:"partner", n:"Partner request",
      t:"A partner has requested an initial assessment of an opportunity with an existing client by tomorrow morning. The opportunity builds on the team's current work but could involve a different commercial model. A senior analyst has worked closely with the client, while you have participated in earlier discussions about the account.",
@@ -134,26 +131,18 @@ window.CASES = [
      t:"A senior analyst has challenged feedback in their year-end evaluation, arguing that it overlooks their contribution to a difficult project. You have reviewed the evidence and formed an assessment. The analyst has requested a discussion this week, while the formal evaluation meeting is scheduled for Thursday.",
      q:"how to respond to the analyst's challenge to their evaluation."}],
   ai: {
-    high: {
-      presentation: ["delegate", "The senior analyst built the analysis and knows the assumptions in detail. They are best placed to defend the recommendation and can set the team's position before the 2:00 PM deadline."],
-      funding: ["hold", "The vendor requires full expenditure although the information needed to complete the work may not arrive. Commitment should depend on confirming usable inputs."],
-      partner: ["delegate", "This is an initial assessment rather than a binding offer. A senior analyst with client experience can own it, despite the manager\u2019s commercial familiarity."],
-      review: ["wait", "The manager has already formed an assessment and a formal discussion is scheduled for Thursday, so a personal discussion can be deferred."]},
-    moderate: {
-      presentation: ["delegate", "The senior analyst built the analysis and knows the assumptions in detail. They are best placed to defend the recommendation and can set the team's position before the 2:00 PM deadline."],
-      funding: ["hold", "The vendor requires full expenditure although the information needed to complete the work may not arrive. Commitment should depend on confirming usable inputs."],
-      partner: ["delegate", "This is an initial assessment rather than a binding offer. A senior analyst with client experience can own it, despite the manager\u2019s commercial familiarity."],
-      review: ["hold", "The analyst says the feedback overlooks their part in a difficult project. Input from colleagues on that project should be collected before the feedback is discussed again."]},
-    low: {
-      presentation: ["hold", "The client has challenged the commercial assumptions before. The team's position should not be confirmed until those assumptions have been re-tested against the client's latest objections."],
-      funding: ["own", "The extra analysis could strengthen tomorrow's presentation, and the vendor deadline is today. Approving the full amount now secures the support while the team starts with existing data."],
-      partner: ["delegate", "This is an initial assessment rather than a binding offer. A senior analyst with client experience can own it, despite the manager\u2019s commercial familiarity."],
-      review: ["hold", "The analyst says the feedback overlooks their part in a difficult project. Input from colleagues on that project should be collected before the feedback is discussed again."]},
-    very_low: {
-      presentation: ["wait", "The position is not due until 2:00 PM. The manager can settle it early in the afternoon, after dealing with the vendor deadline and the partner's request."],
-      funding: ["wait", "The client information is expected later today. The manager can return to the approval this evening, once the more urgent presentation matters have been handled."],
-      partner: ["hold", "The opportunity could involve a different commercial model. The assessment should not go to the partner until the pricing implications of that model have been worked out."],
-      review: ["own", "The analyst has challenged the evaluation directly and asked to meet this week. Meeting them personally now keeps the disagreement from growing before Thursday's formal meeting."]}}
+    presentation:   {right: "The client has challenged the team\u2019s commercial assumptions on a recommendation that affects its annual budget. The manager should set the team\u2019s position before 2:00 PM, using the analyst\u2019s work.",
+                     wrong: [["delegate", "The senior analyst built the analysis and knows the assumptions in detail. They are best placed to defend the recommendation and can set the team's position before the 2:00 PM deadline."],
+                             ["hold", "The client has challenged the commercial assumptions before. The team's position should not be confirmed until those assumptions have been re-tested against the client's latest objections."],
+                             ["wait", "The position is not due until 2:00 PM. The manager can settle it early in the afternoon, after dealing with the vendor deadline and the partner's request."]]},
+    funding:        {right: "The vendor requires full expenditure although the information needed to complete the work may not arrive. Commitment should depend on confirming usable inputs.",
+                     wrong: [["own", "The extra analysis could strengthen tomorrow's presentation, and the vendor deadline is today. Approving the full amount now secures the support while the team starts with existing data."],
+                             ["wait", "The client information is expected later today. The manager can return to the approval this evening, once the more urgent presentation matters have been handled."]]},
+    partner:        {right: "This is an initial assessment rather than a binding offer. A senior analyst with client experience can own it, despite the manager\u2019s commercial familiarity.",
+                     wrong: [["hold", "The opportunity could involve a different commercial model. The assessment should not go to the partner until the pricing implications of that model have been worked out."]]},
+    review:         {right: "The manager has already formed an assessment and a formal discussion is scheduled for Thursday, so a personal discussion can be deferred.",
+                     wrong: [["hold", "The analyst says the feedback overlooks their part in a difficult project. Input from colleagues on that project should be collected before the feedback is discussed again."],
+                             ["own", "The analyst has challenged the evaluation directly and asked to meet this week. Meeting them personally now keeps the disagreement from growing before Thursday's formal meeting."]]}}
 },
 
 {
@@ -175,26 +164,16 @@ window.CASES = [
      t:"Several alumni have offered to participate in an industry networking session, which could strengthen the festival's professional outreach. You have been developing the programme with the student team, but its proposed format may overlap with an existing event. The schedule will be finalized later this week, while sponsor and registration decisions require attention today.",
      q:"whether and how to include the alumni networking session."}],
   ai: {
-    high: {
-      registration: ["own", "The decision uses most remaining publicity funds under uncertain causes of low registrations, requiring a committee-wide resource judgment."],
-      sponsor: ["own", "The largest sponsor's contribution and next year's agreement are both at stake. The head should negotiate the branding offer personally and settle the terms with the sponsor today."],
-      venue: ["hold", "A non-refundable commitment to a substantially larger event should await confirmation that the proposed crowd arrangements fit that venue."],
-      programming: ["wait", "The programme discussion is valuable but can be resolved before the later-week schedule deadline after urgent sponsorship and registration choices."]},
-    moderate: {
-      registration: ["own", "The decision uses most remaining publicity funds under uncertain causes of low registrations, requiring a committee-wide resource judgment."],
-      sponsor: ["own", "The largest sponsor's contribution and next year's agreement are both at stake. The head should negotiate the branding offer personally and settle the terms with the sponsor today."],
-      venue: ["hold", "A non-refundable commitment to a substantially larger event should await confirmation that the proposed crowd arrangements fit that venue."],
-      programming: ["hold", "The proposed format may overlap with an existing event. The session should not be confirmed until the overlap in audience and timing with that event has been checked."]},
-    low: {
-      registration: ["hold", "The cause of the 22% drop is unclear: the rival festival and the coordinator's exit may both matter. Committing most of the budget should wait until the cause is better understood."],
-      sponsor: ["hold", "The reduction rests on expected footfall, which registrations will show when they close next week, and the terms also cover next year\u2019s festival. Final terms can be agreed before the festival opens, so committing before footfall is known would be premature."],
-      venue: ["own", "The discounted rate ends this evening and the new event has attracted strong interest. The head should approve the deposit and secure the larger venue before the offer lapses."],
-      programming: ["hold", "The proposed format may overlap with an existing event. The session should not be confirmed until the overlap in audience and timing with that event has been checked."]},
-    very_low: {
-      registration: ["hold", "The cause of the 22% drop is unclear: the rival festival and the coordinator's exit may both matter. Committing most of the budget should wait until the cause is better understood."],
-      sponsor: ["own", "The largest sponsor's contribution and next year's agreement are both at stake. The head should negotiate the branding offer personally and settle the terms with the sponsor today."],
-      venue: ["own", "The discounted rate ends this evening and the new event has attracted strong interest. The head should approve the deposit and secure the larger venue before the offer lapses."],
-      programming: ["hold", "The proposed format may overlap with an existing event. The session should not be confirmed until the overlap in audience and timing with that event has been checked."]}}
+    registration:   {right: "The decision uses most remaining publicity funds under uncertain causes of low registrations, requiring a committee-wide resource judgment.",
+                     wrong: [["hold", "The cause of the 22% drop is unclear: the rival festival and the coordinator's exit may both matter. Committing most of the budget should wait until the cause is better understood."]]},
+    sponsor:        {right: "The reduction rests on expected footfall, which registrations will show when they close next week, and the terms also cover next year\u2019s festival. Final terms can be agreed before the festival opens, so committing before footfall is known would be premature.",
+                     wrong: [["own", "The largest sponsor's contribution and next year's agreement are both at stake. The head should negotiate the branding offer personally and settle the terms with the sponsor today."],
+                             ["delegate", "The sponsorship lead already has a proposal and knows the sponsor. The negotiation sits within their remit and agreed budget, which keeps the head free for other matters."]]},
+    venue:          {right: "A non-refundable commitment to a substantially larger event should await confirmation that the proposed crowd arrangements fit that venue.",
+                     wrong: [["own", "The discounted rate ends this evening and the new event has attracted strong interest. The head should approve the deposit and secure the larger venue before the offer lapses."]]},
+    programming:    {right: "The programme discussion is valuable but can be resolved before the later-week schedule deadline after urgent sponsorship and registration choices.",
+                     wrong: [["hold", "The proposed format may overlap with an existing event. The session should not be confirmed until the overlap in audience and timing with that event has been checked."],
+                             ["delegate", "The student team has been developing the programme and knows the schedule. They can decide how to fit in the alumni session before the schedule is finalised later this week."]]}}
 },
 
 {
@@ -216,26 +195,17 @@ window.CASES = [
      t:"A client whose service ratings have declined wants a recovery plan before the weekend. The account lead proposes closer monitoring and changes to how complaints are escalated. The plan would use the account\u2019s existing staff and stay within agreed service levels, though responses to new requests may be slower. The client expects a credible response tonight.",
      q:"the recovery plan to give the client tonight."}],
   ai: {
-    high: {
-      escalation: ["own", "Repeated alleged failures for a major account raise service accountability and commercial relationship concerns beyond an ordinary ticket response."],
-      guarantee: ["hold", "A firm guarantee is not supported when the present incident has persisted despite intervention, even if previous incidents resolved quickly."],
-      process: ["wait", "The process policy is important but implementation is next month. Immediate weekend decisions take priority."],
-      recovery: ["own", "The client's ratings have declined and a credible response is expected tonight. The manager should own the recovery plan to show the client senior attention."]},
-    moderate: {
-      escalation: ["own", "Repeated alleged failures for a major account raise service accountability and commercial relationship concerns beyond an ordinary ticket response."],
-      guarantee: ["hold", "A firm guarantee is not supported when the present incident has persisted despite intervention, even if previous incidents resolved quickly."],
-      process: ["hold", "The change could increase handling time for complex cases. Its effect on those cases should be measured before deciding whether senior agents get more discretion."],
-      recovery: ["own", "The client's ratings have declined and a credible response is expected tonight. The manager should own the recovery plan to show the client senior attention."]},
-    low: {
-      escalation: ["hold", "The account lead blames unusual demand, while the client says commitments were missed. The ticket data should be reviewed to establish which account is right before the team responds."],
-      guarantee: ["own", "A substantial contract renewal depends on this answer, and similar failures were fixed within a day before. The manager should give the client a firm commitment tonight."],
-      process: ["wait", "The process policy is important but implementation is next month. Immediate weekend decisions take priority."],
-      recovery: ["wait", "The plan uses existing staff and stays within agreed service levels, so nothing has to change before Monday. The manager can review it properly after the weekend."]},
-    very_low: {
-      escalation: ["hold", "The account lead blames unusual demand, while the client says commitments were missed. The ticket data should be reviewed to establish which account is right before the team responds."],
-      guarantee: ["own", "A substantial contract renewal depends on this answer, and similar failures were fixed within a day before. The manager should give the client a firm commitment tonight."],
-      process: ["hold", "The change could increase handling time for complex cases. Its effect on those cases should be measured before deciding whether senior agents get more discretion."],
-      recovery: ["own", "The client's ratings have declined and a credible response is expected tonight. The manager should own the recovery plan to show the client senior attention."]}}
+    escalation:     {right: "Repeated alleged failures for a major account raise service accountability and commercial relationship concerns beyond an ordinary ticket response.",
+                     wrong: [["hold", "The account lead blames unusual demand, while the client says commitments were missed. The ticket data should be reviewed to establish which account is right before the team responds."],
+                             ["wait", "The client wants a response before the weekend, and there are still some hours left. It can be written after the weekend coverage is settled, when the evening is quieter."]]},
+    guarantee:      {right: "A firm guarantee is not supported when the present incident has persisted despite intervention, even if previous incidents resolved quickly.",
+                     wrong: [["own", "A substantial contract renewal depends on this answer, and similar failures were fixed within a day before. The manager should give the client a firm commitment tonight."]]},
+    process:        {right: "The process policy is important but implementation is next month. Immediate weekend decisions take priority.",
+                     wrong: [["hold", "The change could increase handling time for complex cases. Its effect on those cases should be measured before deciding whether senior agents get more discretion."],
+                             ["delegate", "The team lead designed the proposal and will carry it out next month. They are best placed to settle the details of the escalation process within the team's commitments."]]},
+    recovery:       {right: "The plan uses the account\u2019s existing staff and stays within agreed service levels. The account lead knows the client and has a proposal ready, so the lead can finalise it tonight.",
+                     wrong: [["own", "The client's ratings have declined and a credible response is expected tonight. The manager should own the recovery plan to show the client senior attention."],
+                             ["wait", "The plan uses existing staff and stays within agreed service levels, so nothing has to change before Monday. The manager can review it properly after the weekend."]]}}
 },
 
 {
@@ -257,25 +227,14 @@ window.CASES = [
      t:"Two groups have requested dedicated trainers during opening week. One includes long-standing members transferring from another branch; the other could bring substantial new business. The team can fully support only one without reducing regular services, but the other can be fully supported from the following week. The customer experience lead knows both groups and has proposed an arrangement, and both groups expect confirmation today.",
      q:"which group gets dedicated trainers during opening week."}],
   ai: {
-    high: {
-      corporate: ["own", "A price exception for 40 memberships could establish inconsistent treatment of early customers and needs manager-level commercial judgment."],
-      announcement: ["delegate", "The communications lead can adapt an accurate announcement within approved marketing limits while the manager addresses higher-stakes decisions."],
-      readiness: ["hold", "The revised exercise-area arrangement has not been tested under relevant crowd conditions. A firm opening commitment should await a sufficient readiness check."],
-      trainers: ["own", "Both groups matter: one brings loyal members, the other substantial new business. Choosing which group gets dedicated trainers is a judgement the manager should make personally today."]},
-    moderate: {
-      corporate: ["delegate", "The customer lead handles memberships and knows what early members paid. They can agree terms with the company within the opening plan while the manager prepares the launch."],
-      announcement: ["delegate", "The communications lead can adapt an accurate announcement within approved marketing limits while the manager addresses higher-stakes decisions."],
-      readiness: ["hold", "The revised exercise-area arrangement has not been tested under relevant crowd conditions. A firm opening commitment should await a sufficient readiness check."],
-      trainers: ["wait", "The second group can be fully supported from the following week. The allocation can be confirmed after the opening, once the manager has seen how busy the first days are."]},
-    low: {
-      corporate: ["own", "A price exception for 40 memberships could establish inconsistent treatment of early customers and needs manager-level commercial judgment."],
-      announcement: ["hold", "A competitor has just announced a similar offer. The revised message should not go out until its likely effect on early membership sales has been checked."],
-      readiness: ["own", "Staff have rearranged the equipment and expect fewer customers at first. The manager should confirm the noon opening so booked customers and classes go ahead as planned."],
-      trainers: ["wait", "The second group can be fully supported from the following week. The allocation can be confirmed after the opening, once the manager has seen how busy the first days are."]},
-    very_low: {
-      corporate: ["delegate", "The customer lead handles memberships and knows what early members paid. They can agree terms with the company within the opening plan while the manager prepares the launch."],
-      announcement: ["hold", "A competitor has just announced a similar offer. The revised message should not go out until its likely effect on early membership sales has been checked."],
-      readiness: ["own", "Staff have rearranged the equipment and expect fewer customers at first. The manager should confirm the noon opening so booked customers and classes go ahead as planned."],
-      trainers: ["wait", "The second group can be fully supported from the following week. The allocation can be confirmed after the opening, once the manager has seen how busy the first days are."]}}
+    corporate:      {right: "A price exception for 40 memberships could establish inconsistent treatment of early customers and needs manager-level commercial judgment.",
+                     wrong: [["delegate", "The customer lead handles memberships and knows what early members paid. They can agree terms with the company within the opening plan while the manager prepares the launch."]]},
+    announcement:   {right: "The communications lead can adapt an accurate announcement within approved marketing limits while the manager addresses higher-stakes decisions.",
+                     wrong: [["hold", "A competitor has just announced a similar offer. The revised message should not go out until its likely effect on early membership sales has been checked."]]},
+    readiness:      {right: "The revised exercise-area arrangement has not been tested under relevant crowd conditions. A firm opening commitment should await a sufficient readiness check.",
+                     wrong: [["own", "Staff have rearranged the equipment and expect fewer customers at first. The manager should confirm the noon opening so booked customers and classes go ahead as planned."]]},
+    trainers:       {right: "The customer experience lead knows both groups and has already proposed an arrangement. The second group can be supported from the following week, so the lead can confirm the plan today.",
+                     wrong: [["own", "Both groups matter: one brings loyal members, the other substantial new business. Choosing which group gets dedicated trainers is a judgement the manager should make personally today."],
+                             ["wait", "The second group can be fully supported from the following week. The allocation can be confirmed after the opening, once the manager has seen how busy the first days are."]]}}
 }
 ];

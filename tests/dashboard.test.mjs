@@ -30,19 +30,40 @@ test("a record missing one decision's final answer is not complete", () => {
   assert.deepEqual(rows([r]), []);
 });
 
-test("preferred answers everywhere score 100 per caselet; AI levels follow the condition", () => {
-  const [p] = rows([makeRecord(site, { pid: "a", condition: 0 })]);
+test("preferred answers everywhere score 100 per caselet; advice is right on exactly half the decisions", () => {
+  const rec = makeRecord(site, { pid: "a" });
+  const [p] = rows([rec]);
   assert.equal(p.cases.length, 5);
   assert.deepEqual(p.cases.map(c => c.first), [100, 100, 100, 100, 100]);
   assert.deepEqual(p.cases.map(c => c.final), [100, 100, 100, 100, 100]);
   assert.equal(p.mda, 100);
-  assert.deepEqual(p.cases.map(c => [c.id, c.level, c.aiScore]),
-    [[3, "high", 92.5], [2, "moderate", 67.5], [5, "low", 35], [4, "very_low", 27.5], [1, "high", 92.5]]);
+  const ds = [].concat(...p.cases.map(c => c.decisions));
+  assert.equal(ds.filter(d => d.aiRight).length, 10);
+  for (const c of p.cases) {
+    assert.equal(c.aiRight, c.decisions.filter(d => d.aiRight).length);
+    assert.equal(c.aiScore, rec.cases[c.id].ai.score);
+    for (const d of c.decisions) assert.equal(d.aiRight, rec.cases[c.id].ai.right[d.k]);
+  }
+  /* all right and all wrong */
+  const [r] = rows([makeRecord(site, { pid: "r", advice: "right" })]);
+  assert.deepEqual(r.cases.map(c => [c.aiRight, c.aiScore]), Array(5).fill([4, 100]));
+  const [w] = rows([makeRecord(site, { pid: "w", advice: "wrong" })]);
+  assert.ok(w.cases.every(c => c.aiRight === 0 && c.aiScore < 100));
   assert.equal(p.totalMin, 30);
 });
 
+test("records from the four-level design are read from their stored advice", () => {
+  const rec = makeRecord(site, { pid: "old4" });
+  for (const id of Object.keys(rec.cases)) { delete rec.cases[id].ai.right; delete rec.cases[id].ai.rightCount; rec.cases[id].ai.level = "high"; }
+  delete rec.advice; rec.aiCondition = 1;
+  const [p] = rows([rec]);
+  assert.equal([].concat(...p.cases.map(c => c.decisions)).filter(d => d.aiRight).length, 10);
+  assert.equal(p.cases[0].level, "high");
+  assert.equal(p.condition, 1);
+});
+
 test("taking all the AI advice moves the final score to the advice score", () => {
-  const [p] = rows([makeRecord(site, { pid: "b", condition: 2, first: "own", final: "ai" })]);
+  const [p] = rows([makeRecord(site, { pid: "b", first: "own", final: "ai" })]);
   for (const c of p.cases) {
     assert.equal(c.final, c.aiScore);
     assert.equal(c.gain, c.final - c.first);
@@ -50,6 +71,7 @@ test("taking all the AI advice moves the final score to the advice score", () =>
       assert.equal(d.final, d.ai);
       assert.equal(d.tookAI, d.first !== d.ai);
       assert.equal(d.changed, d.first !== d.final);
+      assert.equal(d.gain, d.finalScore - d.firstScore);
     }
   }
   /* every Own first answer: Monday scores 4+20+20+11 out of 80 */
@@ -64,11 +86,11 @@ test("decision rows: one per person and decision, with the leave-one-out ability
 });
 
 test("CSV: one row per person and decision, with the manual's fields", () => {
-  const per = [makeRecord(site, { pid: "a" }), makeRecord(site, { pid: "b", condition: 3 })];
+  const per = [makeRecord(site, { pid: "a", advice: "right" }), makeRecord(site, { pid: "b" })];
   const csv = plain(site.run(`toCSV(personRows(${J(per)}))`)).split("\n");
   assert.equal(csv.length, 1 + 40);
   const head = csv[0].split(",");
-  for (const col of ["pid", "case_id", "decision_id", "first_action", "final_action", "ai_action", "ai_condition", "ai_level",
+  for (const col of ["pid", "case_id", "decision_id", "first_action", "final_action", "ai_action", "ai_right", "ai_condition", "ai_level", "case_ai_right",
                      "ai_text", "decision_ms_first", "decision_ms_final", "confidence", "instrument_version", "recorded_key_hash"])
     assert.ok(head.includes(col), "missing column " + col);
   /* a row parses back to the right decision */
@@ -80,11 +102,13 @@ test("CSV: one row per person and decision, with the manual's fields", () => {
   assert.equal(row.case_id, "3");
   assert.equal(row.decision_id, "expansion");
   assert.equal(row.first_action, "hold");
-  assert.equal(row.ai_level, "high");
+  assert.equal(row.ai_right, "1");
+  assert.equal(row.ai_level, "");
+  assert.equal(row.case_ai_right, "4");
   assert.equal(row.ai_action, "hold");
   assert.match(row.ai_text, /^A binding scope and timeline promise/);
   assert.equal(row.first_score, "20");
-  assert.equal(row.instrument_version, "survey-2026-11-5x4");
+  assert.equal(row.instrument_version, "survey-2026-11-5x4-r50");
   assert.ok(!head.includes("attention_check_passed") && !head.includes("cat"), "no columns for removed questions");
 });
 

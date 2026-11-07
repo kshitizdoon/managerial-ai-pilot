@@ -20,7 +20,7 @@ const on = () => { process.env.EVALUATOR_ENABLED = "1"; process.env.DASHBOARD_KE
 async function seeded(n){
   const env = await setup();
   for (let i = 0; i < n; i++)
-    await env.fn.post(makeRecord(node, { pid: "seed" + i, condition: i % 4, first: FIRSTS[i % 5], final: i % 2 ? "ai" : "first",
+    await env.fn.post(makeRecord(node, { pid: "seed" + i, seed: i, first: FIRSTS[i % 5], final: i % 2 ? "ai" : "first",
                                          contact: { name: "Seed Person " + i, mobile: "91111111" + i } }));
   return env;
 }
@@ -221,7 +221,7 @@ test("dashboard: Evaluator results kept apart, incomplete evaluations left out, 
     assert.equal(lines.length, 1 + 3);
     const head = lines[0].split(",");
     for (const col of ["evaluator_pid", "condition", "case_id", "decision_ids", "target_pid", "target_mda", "target_mda_leave_one_out",
-                       "target_instrument_version", "ai_level", "rating", "confidence", "seconds"]) assert.ok(head.includes(col), col);
+                       "target_instrument_version", "ai_level", "ai_right_count", "rating", "confidence", "seconds"]) assert.ok(head.includes(col), col);
     assert.ok(lines.slice(1).every(l => l.startsWith("seed0,")));
     const [raw] = await Promise.all([page.waitForEvent("download"), page.click("#evjson")]);
     const j = JSON.parse(fs.readFileSync(await raw.path(), "utf8"));

@@ -9,7 +9,6 @@ box.window = box; vm.createContext(box);
   vm.runInContext(fs.readFileSync(f,"utf8"), box, {filename:f}));
 const run = s => vm.runInContext(s, box);
 const {CASES, KEY, ACTIONS, INSTRUCTIONS, CONFIG} = box;
-const LEVELS = run("AI_LEVELS"), LEVEL_NAME = {high:"High", moderate:"Moderate", low:"Low", very_low:"Very low"};
 const label = a => (ACTIONS.find(x => x[0] === a) || [a, a])[1];
 const meta = run("instrumentMeta()");
 
@@ -27,7 +26,8 @@ L.push("- Every AI reason for a non-preferred action is specific to its decision
 L.push("- The instructions add a who-decides / when grid. The four actions share one neutral style; no action has a colour.");
 L.push("- November 2026: five caselets with four decisions each. Day Before Travel is dropped, with one decision from each other caselet (Monday Project Team / Client escalation, Strong Employee / Employee development, Fest Week / Event staffing, Friday Support Team / Weekend service allocation, Launch Morning / Team responsibilities).");
 L.push("- November 2026: some AI actions were moved so that every caselet scores the same at each advice level (high, moderate, low and very low advice are one, two, three and four decisions away from the preferred action). Moved actions reuse the reason written for that action at another level; Monday Project Team / Revised recommendation at very low has a new reason.");
-L.push("- November 2026: no practice questions and no Own-versus-Delegate example; shorter instructions and welcome text; About you and the prize draw are on the last page; the pilot feedback and last-few-questions blocks are gone.\n");
+L.push("- November 2026: no practice questions and no Own-versus-Delegate example; shorter instructions and welcome text; About you and the prize draw are on the last page; the pilot feedback and last-few-questions blocks are gone.");
+L.push("- November 2026 (`survey-2026-11-5x4-r50`): the four advice levels are replaced by advice that is right or wrong decision by decision, drawn at random for each respondent (half right, half wrong). Each decision has one right advice and one or more wrong ones, taken from the earlier levels. Four decisions had no right advice at any level and now have one: Monday Project Team / Delivery recovery, Strong Employee / Client presentation, Friday Support Team / Client recovery plan, Launch Morning / Customer experience. Decision order inside each caselet is now shuffled. Strong Employee / Financial commitment is reworded in plainer language.\n");
 
 L.push("## Instructions respondents read\n");
 L.push(INSTRUCTIONS + "\n");
@@ -42,20 +42,10 @@ L.push("");
 
 L.push("## Order and AI advice assignment\n");
 L.push(`Caselet order is ${CONFIG.randomiseCaseOrder ? "randomised per respondent" : "fixed"}. Decision order inside a caselet is ${CONFIG.randomiseDecisionOrder ? "randomised per respondent" : "fixed, as numbered below"}. Both orders are stored on every response.\n`);
-L.push(`Each respondent is given one of ${CONFIG.aiConditions} AI conditions at random. The condition rotates the four advice levels across the caselets, so every respondent sees every level, and across the conditions every caselet appears at every level once. Levels and scores are never shown to respondents.\n`);
-L.push("| Caselet | " + [...Array(CONFIG.aiConditions).keys()].map(i => `Condition ${i}`).join(" | ") + " |");
-L.push("| --- |" + " --- |".repeat(CONFIG.aiConditions));
-const assign = [...Array(CONFIG.aiConditions).keys()].map(i => run(`aiAssignment(${i})`));
-CASES.forEach(c => L.push(`| ${c.name} | ` + assign.map(a => LEVEL_NAME[a[c.id]]).join(" | ") + " |"));
-L.push("");
+L.push(`For each respondent the AI advice is right (the key's preferred action) on ${Math.round(CONFIG.aiRightShare * 100)}% of all decisions, chosen at random, and wrong on the rest. Wrong advice picks one of the decision's wrong options at random. Whether advice is right is never shown to respondents. The draw is stored with every response.\n`);
 
 L.push("## Scoring\n");
 L.push(`Every decision scores all four actions from 0 to 20; each decision has exactly one 20, its preferred action. A caselet score is the sum of its ${run("DECISIONS_PER_CASE")} decision scores, rescaled to 0 to 100 (sum × 100 / ${20 * run("DECISIONS_PER_CASE")}), for the first answers, the final answers and the AI advice alike.\n`);
-L.push("| Caselet | " + LEVELS.map(l => LEVEL_NAME[l] + " advice").join(" | ") + " |");
-L.push("| --- |" + " --- |".repeat(LEVELS.length));
-CASES.forEach(c => L.push(`| ${c.name} | ` + LEVELS.map(l => run(`aiPlanScore(caseById(${c.id}), "${l}")`)).join(" | ") + " |"));
-L.push("");
-
 CASES.forEach(c => {
   L.push(`## ${c.name} (case ${c.id})\n`);
   L.push(`*${c.when}*\n`);
@@ -68,12 +58,13 @@ CASES.forEach(c => {
   c.decisions.forEach(d => { const K = KEY[c.id][d.k];
     L.push(`| ${d.n} | ${K.own} | ${K.delegate} | ${K.wait} | ${K.hold} | ${label(run(`preferredAction(${c.id}, "${d.k}")`))} |`); });
   L.push("\n**AI advice**\n");
-  LEVELS.forEach(l => {
-    const s = run(`scorePlan(${c.id}, aiPlan(caseById(${c.id}), "${l}").actions)`);
-    L.push(`*${LEVEL_NAME[l]}: ${s.total}/100, ${s.matches} of ${c.decisions.length} preferred*\n`);
-    c.decisions.forEach((d, i) => L.push(`${i+1}. ${d.n}: **${label(c.ai[l][d.k][0])}**. ${c.ai[l][d.k][1]}`));
-    L.push("");
+  c.decisions.forEach((d, i) => {
+    const a = c.ai[d.k];
+    L.push(`${i+1}. **${d.n}**`);
+    L.push(`   - Right: **${label(run(`preferredAction(${c.id}, "${d.k}")`))}**. ${a.right}`);
+    a.wrong.forEach(([act, why]) => L.push(`   - Wrong: **${label(act)}** (scores ${KEY[c.id][d.k][act]}). ${why}`));
   });
+  L.push("");
 });
 
 /* the server's copy of what it needs to score a Producer record: the key,
