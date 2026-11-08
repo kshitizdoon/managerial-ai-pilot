@@ -45,6 +45,13 @@ function startSurvey(){
     try{ history.replaceState(null, "", location.pathname + (q ? "?" + q : "") + location.hash); }catch(e){}
     return startFresh();
   }
+  /* Direct evaluator-only link; no Producer answers are required. */
+  if(url.get("part") === "2"){
+    url.delete("part");
+    const q = url.toString();
+    try{ history.replaceState(null, "", location.pathname + (q ? "?" + q : "") + location.hash); }catch(e){}
+    return evDirectStart();
+  }
   /* ?evaluate=PID: Part 2 for someone who finished Part 1 earlier, perhaps
      on another device. The server checks that PID finished Part 1. */
   if(url.has("evaluate")){
@@ -181,7 +188,10 @@ function welcome(){
    <p class="small muted">Your decisions may be shown anonymously to other participants in this study, who will rate them.</p>
    ${CONFIG.contactAt === "start" ? contactHTML() : ""}
    <p class="err" id="e"></p>
-   <button class="go" id="begin">Start</button>`);
+   <button class="go" id="begin">Start Part 1</button>
+   <p class="small muted" style="margin-top:1.5rem">Only want to rate managerial decision profiles?</p>
+   <button class="go" id="direct-evaluator" type="button">Go directly to Part 2 (Evaluator)</button>`);
+  document.getElementById("direct-evaluator").onclick = evDirectStart;
   document.getElementById("begin").onclick = () => {
     if(CONFIG.contactAt === "start" && !readContact()) return;
     beginResponse();

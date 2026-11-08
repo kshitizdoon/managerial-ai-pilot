@@ -54,6 +54,25 @@ function evaluatorOffer(producer){
   return true;
 }
 
+/* Evaluator-only participants get a separate, recognizable identifier.
+   Never clear or overwrite a Producer response saved on this device. */
+async function evDirectStart(){
+  const existing = evLoad();
+  if(existing && existing.pid && existing.pid.startsWith("evonly_") && !existing.declined){
+    return evResume(existing);
+  }
+  setStep("Part 2", 0);
+  paint(`<h1>Part 2: Evaluator</h1><p class="muted">Checking availability…</p>`);
+  const status = await evStatus();
+  if(!status.enabled){
+    paint(`<h1>Part 2 is unavailable</h1><p>The evaluator survey is not enabled at the moment.</p><button class="go" id="back-to-welcome">Back to survey</button>`);
+    document.getElementById("back-to-welcome").onclick = welcome;
+    return;
+  }
+  const pid = "evonly_" + uid();
+  return evOffer(pid, true);
+}
+
 /* resume Part 2 without the Producer record on this device (link with ?evaluate=PID) */
 function evResume(ev){
   EV = ev;
@@ -62,22 +81,23 @@ function evResume(ev){
   return evOffer(ev.pid);
 }
 
-function evOffer(pid){
-  setStep("Part 1 done", 100);
+function evOffer(pid, direct = pid.startsWith("evonly_")){
+  setStep(direct ? "Part 2" : "Part 1 done", direct ? 0 : 100);
   paint(`
-   <h1>Part 1 is done</h1>
-   <p class="small muted">Your answers were saved.</p>
+   <h1>${direct ? "Part 2: Evaluator" : "Part 1 is done"}</h1>
+   <p class="small muted">${direct ? "You can complete this section without taking Part 1." : "Your answers were saved."}</p>
    <div class="card">
      <h2 style="margin-top:0">Part 2: rate three decision profiles</h2>
-     <p class="serif">You will see standardized managerial decisions for three anonymized profiles in one of the situations you have just worked through. You will not see who they are. For each profile, you rate managerial decision-making ability from what you see.</p>
+     <p class="serif">You will see standardized managerial decisions for three anonymized profiles in a managerial situation. You will not see who they are. For each profile, you rate managerial decision-making ability from what you see.</p>
      <p class="serif" style="margin:0">It takes about five minutes.</p>
    </div>
    <p class="err" id="e"></p>
    <button class="go" id="ev-go">Continue to part 2</button>
-   <p class="small muted" style="margin-top:1.4rem"><a href="#" id="ev-skip">Finish without part 2</a></p>`);
+   <p class="small muted" style="margin-top:1.4rem"><a href="#" id="ev-skip">${direct ? "Return to survey" : "Finish without part 2"}</a></p>`);
   document.getElementById("ev-go").onclick = () => evAssign(pid);
   document.getElementById("ev-skip").onclick = e => {
     e.preventDefault();
+    if(direct){ evClear(); return welcome(); }
     EV = {pid, stage:"evaluator", declined:true, declinedAt:new Date().toISOString()};
     evSave();
     if(ST && ST.pid === pid) thanks(); else evFinal();

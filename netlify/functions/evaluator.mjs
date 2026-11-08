@@ -78,7 +78,7 @@ async function handle(request) {
     if (!s.enabled) return json({ error: "evaluator stage is not enabled" }, 403);
     /* only someone who has finished the Producer stage, under this PID */
     const own = await st.producers.get(pid, { type: "json" }).catch(() => null);
-    if (!own || !own.done) return json({ error: "producer stage not complete for this pid" }, 403);
+    if ((!own || !own.done) && !/^evonly_[a-z0-9]{6,40}$/.test(pid)) return json({ error: "producer stage not complete for this pid" }, 403);
     const prior = await readAll(st.assignments);
     const r = chooseAssignment([], prior, pid, s);
     if (r.notEnough) return json({ status: "not_enough", eligible: r.notEnough.eligible, needed: r.notEnough.needed });
