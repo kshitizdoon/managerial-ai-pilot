@@ -471,7 +471,7 @@ function evaluatorStats(rows){
   });
 }
 
-const COND_NAMES = {A: "A · final decisions only", B: "B · plus the AI advice received", C: "C · plus first decisions and changes"};
+const COND_NAMES = {A: "A · AI advice + final", B: "B · AI advice + initial + final", C: "C · final only"};
 
 function evaluatorSection(ev){
   if(!ev) return "";
@@ -486,7 +486,7 @@ function evaluatorSection(ev){
   return `
    <h2 id="evaluator">Part 2: Evaluator stage</h2>
    <p class="muted" id="evcounts">${complete.length} completed evaluator${complete.length === 1 ? "" : "s"}; ${unfinished.length + assignedOnly.length} unfinished. Stage ${ev.settings.enabled ? "switched on" : "switched off"} (EVALUATOR_ENABLED).</p>
-   <p class="small muted" id="evpool">Eligible Producer records for evaluation: ${pool.eligible ?? "—"} of ${pool.total ?? "—"} (at least ${pool.minTargets ?? 3} needed). Excluded: ${esc(reasons)}.</p>
+   <p class="small muted" id="evpool">${pool.mode === "fixed_profiles" ? "Researcher-controlled high/low profiles; each condition independently assigned 50/50." : `Eligible Producer records for evaluation: ${pool.eligible ?? "—"} of ${pool.total ?? "—"} (at least ${pool.minTargets ?? 3} needed). Excluded: ${esc(reasons)}.`}</p>
    ${unfinished.length || assignedOnly.length ? `<div class="scroll"><table class="data" id="evunfinished">
      <tr><th>PID</th><th>People rated</th><th>Status</th><th>Last checkpoint</th></tr>
      ${unfinished.map(({e, a, st}) => `<tr><td>${esc(e.pid)}</td><td>${Object.values(e.items || {}).filter(x => x.rating != null).length}/${a ? a.slots.length : 3}</td><td>${st === "anomalous" ? "marked finished, but incomplete" : "in progress"}</td><td>${esc(e.receivedAt || "—")}</td></tr>`).join("")}
@@ -494,13 +494,13 @@ function evaluatorSection(ev){
    </table></div>
    <p class="small muted">Unfinished evaluations are left out of every number below.</p>` : ""}
    <div class="scroll"><table class="data" id="evconditions">
-     <tr><th>Condition</th><th>Ratings</th><th>Mean rating</th><th>SD</th><th>r with target ability (leave-one-out)</th><th>r, full ability</th><th>r, within-evaluator z</th><th>Mean abs. error</th><th>Mean error</th><th>High minus low third</th><th>Confidence</th><th>Median seconds</th></tr>
+     <tr><th>Condition</th><th>Ratings</th><th>Mean rating</th><th>SD</th><th>r with target ability (leave-one-out)</th><th>r, full ability</th><th>r, within-evaluator z</th><th>Mean abs. error</th><th>Mean error</th><th>High minus low</th><th>Confidence</th><th>Median seconds</th></tr>
      ${stats.map(x => `<tr><td>${COND_NAMES[x.cond]}</td><td>${x.n}</td><td>${fmt(x.mean)}</td><td>${fmt(x.sd)}</td><td>${fmt(x.rLoo,2)}</td><td>${fmt(x.rFull,2)}</td><td>${fmt(x.rZ,2)}</td><td>${fmt(x.mae)}</td><td>${fmt(x.bias)}</td><td>${fmt(x.hiLo)}</td><td>${fmt(x.conf)}</td><td>${fmt(x.seconds,0)}</td></tr>`).join("")}
    </table></div>
-   <p class="small muted">Target ability is the target's pre-AI managerial decision-making ability (mean first-answer caselet score, 0-100), leaving out the caselet shown. Error compares the 0-100 rating with that score, so read it as calibration, not accuracy in a strict sense. Median evaluator time: ${fmt(med(complete.map(x => x.e.totalMin).filter(Number.isFinite)))} minutes.</p>
+   <p class="small muted">For fixed profiles, ability is predetermined by the scoring key on the three displayed decisions. High-minus-low measures ability discrimination; rating error measures calibration to the fixed score. Median evaluator time: ${fmt(med(complete.map(x => x.e.totalMin).filter(Number.isFinite)))} minutes.</p>
    ${rows.length ? `<p><button class="ghost" id="evcsv">Download evaluator CSV, one row per rating</button></p>` : ""}
    ${ev.assignments.length || ev.evaluations.length ? `<p><button class="ghost" id="evjson">Download evaluator raw JSON (assignments and records)</button></p>
-   <p class="small muted">The evaluator files name the target Producer by PID so the two stages can be joined. Keep them as private as the Producer files.</p>` : ""}`;
+   <p class="small muted">Fixed profiles use synthetic target identifiers; no earlier Producer records are shown.</p>` : ""}`;
 }
 
 const EV_CSV_HEAD = ["evaluator_pid","assignment_id","position","condition","case_id","decision_ids","target_pid","target_ability_third",

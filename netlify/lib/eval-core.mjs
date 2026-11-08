@@ -25,7 +25,7 @@ import { KEY, CASE_IDS, CASE_DECISIONS, RECORD_SCHEMA, INSTRUMENT_VERSION, DECIS
 
 export const CONDITIONS = ["A", "B", "C"];
 export const STRATA = ["high", "middle", "low"];
-export const EVAL_SCHEMA = 1;
+export const EVAL_SCHEMA = 2;
 /* first Producer consent text that covers showing decisions to other participants */
 export const REUSE_CONSENT_VERSION = 2;
 const ACTIONS = ["own", "delegate", "wait", "hold"];
@@ -149,71 +149,60 @@ export function displayFor(rec, caseId, decisionIds, condition) {
   };
 }
 
-/* records: Producer records (any state; filtered here). prior: existing
-   assignments. Returns {assignment} or {notEnough: {eligible, needed}}. */
+/* Fixed researcher-authored profiles. Each of A/B/C independently receives
+   high or low ability with probability 1/2. The same case and decisions are
+   shown across conditions; the advice is identical for high and low profiles. */
+import { FIXED_ADVICE } from "./evaluator-fixtures.mjs";
+
 export function chooseAssignment(records, prior, evaluatorPid, s, rng = Math.random, now = new Date()) {
-  const pool = records.filter(r => eligibility(r, s, evaluatorPid).ok);
-  if (pool.length < s.minTargets) return { notEnough: { eligible: pool.length, needed: s.minTargets } };
-
-  const caseUse = counter(), tripleUse = counter(), permUse = counter(), orderUse = counter(),
-        targetUse = counter(), condLevel = counter(), condVersion = counter();
+  const caseUse = counter(), tripleUse = counter(), orderUse = counter();
   prior.forEach(a => {
-    caseUse.add(a.caseId); tripleUse.add(a.caseId + ":" + a.decisionIds.join(","));
-    permUse.add(a.permIndex); orderUse.add(a.orderIndex);
-    a.slots.forEach(sl => { targetUse.add(sl.target.pid); condLevel.add(sl.condition + ":" + sl.target.aiRight);
-                            condVersion.add(sl.condition + ":" + sl.target.instrumentVersion); });
+    if (!CASE_IDS.includes(a.caseId) || !Array.isArray(a.decisionIds)) return;
+    caseUse.add(a.caseId);
+    tripleUse.add(a.caseId + ":" + a.decisionIds.join(","));
+    if (Number.isInteger(a.orderIndex)) orderUse.add(a.orderIndex);
   });
-
   const caseId = leastUsed(CASE_IDS, id => caseUse.get(id), rng);
   const decisionIds = leastUsed(triples(caseId), t => tripleUse.get(caseId + ":" + t.join(",")), rng);
-  const permIndex = leastUsed(CONDITION_PERMS.map((_, i) => i), i => permUse.get(i), rng);
   const orderIndex = leastUsed(ORDERS.map((_, i) => i), i => orderUse.get(i), rng);
-
-  /* thirds by leave-one-case-out ability, highest first; random among equal scores */
-  const ranked = pool.map(r => ({ r, loo: mdaLoo(r, caseId), t: rng() }))
-    .sort((a, b) => b.loo - a.loo || a.t - b.t);
-  const thirds = [[], [], []];
-  ranked.forEach((x, i) => thirds[Math.floor(i * 3 / ranked.length)].push(x.r));
-
-  const slots = STRATA.map((stratum, g) => {
-    const condition = CONDITION_PERMS[permIndex][g];
-    const r = leastUsed(thirds[g], x => targetUse.get(x.pid), rng, [
-      x => condLevel.get(condition + ":" + adviceRight(x, caseId)),
-      x => condVersion.get(condition + ":" + versionOf(x))
-    ]);
-    const ai = r.cases[caseId].ai;
+  const slots = CONDITIONS.map(condition => {
+    const stratum = rng() < 0.5 ? "high" : "low";
+    const allKeys = CASE_DECISIONS[caseId];
+    const actions = Object.fromEntries(allKeys.map(k => {
+      const scores = KEY[caseId][k];
+      const ranked = [...ACTIONS].sort((a,b) => scores[b] - scores[a]);
+      return [k, stratum === "high" ? ranked[0] : ranked[ranked.length - 1]];
+    }));
+    const ai = FIXED_ADVICE[caseId];
+    const decisions = decisionIds.map(k => {
+      const d = {k, final: actions[k]};
+      if (condition === "A" || condition === "B") d.ai = {action: ai[k].action, why: ai[k].why};
+      if (condition === "B") d.first = actions[k];
+      return d;
+    });
+    const ability = Math.round(decisionIds.reduce((sum,k) => sum + KEY[caseId][k][actions[k]], 0) * 100 / (DECISION_MAX * decisionIds.length) * 100) / 100;
+    const fullAbility = Math.round(allKeys.reduce((sum,k) => sum + KEY[caseId][k][actions[k]], 0) * 100 / (DECISION_MAX * allKeys.length) * 100) / 100;
     return {
-      condition, stratum,
-      position: ORDERS[orderIndex].indexOf(condition) + 1,
-      token: "t" + Math.floor(rng() * 36 ** 8).toString(36).padStart(8, "0") + g,
+      condition, stratum, position: ORDERS[orderIndex].indexOf(condition) + 1,
+      token: "t" + Math.floor(rng() * 36 ** 10).toString(36).padStart(10,"0") + condition,
       target: {
-        pid: r.pid,
-        instrumentVersion: versionOf(r),
-        keyHash: (r.instrument && r.instrument.keyHash) || null,
-        casesHash: (r.instrument && r.instrument.casesHash) || null,
-        scoringVersion: (r.instrument && r.instrument.scoringVersion) || null,
-        aiCondition: r.aiCondition ?? null,
-        aiLevel: levelOf(r, caseId),
-        aiRight: adviceRight(r, caseId),
-        aiCaseScore: ai && Number.isFinite(ai.score) ? ai.score : null,
-        caseFirstScore: caseFirstScore(r, caseId),
-        mda: mda(r),
-        mdaLoo: mdaLoo(r, caseId),
-        producerMinutes: producerMinutes(r)
+        pid: `fixed-${caseId}-${stratum}`, instrumentVersion: INSTRUMENT_VERSION,
+        keyHash: null, scoringVersion: null, aiLevel: "standardized",
+        aiRight: decisionIds.filter(k => ai[k].action === preferred(caseId,k)).length,
+        aiCaseScore: null, caseFirstScore: fullAbility, mda: fullAbility,
+        mdaLoo: ability, producerMinutes: null, synthetic: true
       },
-      display: displayFor(r, caseId, decisionIds, condition)
+      display: {caseId, decisions}
     };
-  }).sort((a, b) => a.position - b.position);
-
-  return { assignment: {
+  }).sort((a,b) => a.position - b.position);
+  return {assignment: {
     id: "a" + Math.floor(rng() * 36 ** 10).toString(36),
     evaluatorPid, createdAt: now.toISOString(), evalSchema: EVAL_SCHEMA,
-    scoredWith: { instrumentVersion: INSTRUMENT_VERSION },
-    caseId, decisionIds, permIndex, orderIndex,
-    order: ORDERS[orderIndex], poolSize: pool.length,
-    rules: { minMinutes: s.minMinutes, requireAttention: s.requireAttention, includeLegacyConsent: s.includeLegacyConsent },
+    scoredWith: {instrumentVersion: INSTRUMENT_VERSION},
+    caseId, decisionIds, orderIndex, order: ORDERS[orderIndex],
+    poolSize: null, source: "researcher_fixed_profiles", assignmentVersion: 2,
     slots
-  } };
+  }};
 }
 
 /* what the browser gets: decisions to show and an opaque token per person.

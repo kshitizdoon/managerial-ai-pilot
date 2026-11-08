@@ -68,8 +68,8 @@ function evOffer(pid){
    <h1>Part 1 is done</h1>
    <p class="small muted">Your answers were saved.</p>
    <div class="card">
-     <h2 style="margin-top:0">Part 2: rate three earlier participants</h2>
-     <p class="serif">You will see decisions that three earlier participants made in one of the situations you have just worked through. You will not see who they are. For each person, you rate their managerial decision-making ability from what you see.</p>
+     <h2 style="margin-top:0">Part 2: rate three decision profiles</h2>
+     <p class="serif">You will see standardized managerial decisions for three anonymized profiles in one of the situations you have just worked through. You will not see who they are. For each profile, you rate managerial decision-making ability from what you see.</p>
      <p class="serif" style="margin:0">It takes about five minutes.</p>
    </div>
    <p class="err" id="e"></p>

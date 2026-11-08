@@ -57,7 +57,7 @@ async function handle(request) {
     if (!k.ok) return json({ error: k.error }, k.status);
     const st = stores();
     const [producers, assignments, evaluations] = await Promise.all([readAll(st.producers), readAll(st.assignments), readAll(st.evaluations)]);
-    return json({ settings: s, pool: poolSummary(producers, s), assignments, evaluations });
+    return json({ settings: s, pool: {mode:"fixed_profiles", eligible:null, total:null, excluded:{}, minTargets:0}, assignments, evaluations });
   }
 
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
@@ -79,8 +79,8 @@ async function handle(request) {
     /* only someone who has finished the Producer stage, under this PID */
     const own = await st.producers.get(pid, { type: "json" }).catch(() => null);
     if (!own || !own.done) return json({ error: "producer stage not complete for this pid" }, 403);
-    const [producers, prior] = await Promise.all([readAll(st.producers), readAll(st.assignments)]);
-    const r = chooseAssignment(producers, prior, pid, s);
+    const prior = await readAll(st.assignments);
+    const r = chooseAssignment([], prior, pid, s);
     if (r.notEnough) return json({ status: "not_enough", eligible: r.notEnough.eligible, needed: r.notEnough.needed });
     const res = await st.assignments.setJSON(pid, r.assignment, { onlyIfNew: true });
     if (res && res.modified === false) {
