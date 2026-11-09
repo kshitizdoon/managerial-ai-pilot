@@ -93,14 +93,12 @@ function evOffer(pid, direct = pid.startsWith("evonly_")){
    </div>
    <p class="err" id="e"></p>
    <button class="go" id="ev-go">Continue to part 2</button>
-   <p class="small muted" style="margin-top:1.4rem"><a href="#" id="ev-skip">${direct ? "Return to survey" : "Finish without part 2"}</a></p>`);
+   ${direct ? `<p class="small muted" style="margin-top:1.4rem"><a href="#" id="ev-skip">Return to survey</a></p>` : ""}`);
   document.getElementById("ev-go").onclick = () => evAssign(pid);
-  document.getElementById("ev-skip").onclick = e => {
+  if(direct) document.getElementById("ev-skip").onclick = e => {
     e.preventDefault();
-    if(direct){ evClear(); return welcome(); }
-    EV = {pid, stage:"evaluator", declined:true, declinedAt:new Date().toISOString()};
-    evSave();
-    if(ST && ST.pid === pid) thanks(); else evFinal();
+    evClear();
+    welcome();
   };
 }
 
